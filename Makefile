@@ -4,7 +4,7 @@ GOFLAGS    := -trimpath
 LDFLAGS    := -s -w
 OUTDIR     := cosmic-packages
 WORKDIR    := cosmic-work
-REPOS      := repos.json
+REPOS      := built-in
 TAG        :=
 JOBS       := $(shell nproc)
 DESTDIR    :=
@@ -47,8 +47,6 @@ install: build
 	@install -m 0755 scripts/install-local.sh    $(SCRIPTDIR)/install-local.sh
 	@install -m 0755 scripts/install-release.sh  $(SCRIPTDIR)/install-release.sh
 	@install -m 0755 scripts/uninstall.sh        $(SCRIPTDIR)/uninstall.sh
-	@install -d $(DESTDIR)$(PREFIX)/share/cosmic-deb
-	@install -m 0644 repos.json                  $(DESTDIR)$(PREFIX)/share/cosmic-deb/repos.json
 	@echo ">> Installation complete."
 
 uninstall:
