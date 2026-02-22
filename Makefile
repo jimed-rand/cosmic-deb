@@ -4,6 +4,7 @@ GOFLAGS    := -trimpath
 LDFLAGS    := -s -w
 OUTDIR     := cosmic-packages
 WORKDIR    := cosmic-work
+REPOS      := repos.json
 TAG        :=
 JOBS       := $(shell nproc)
 DESTDIR    :=
@@ -13,7 +14,7 @@ SCRIPTDIR  := $(DESTDIR)$(PREFIX)/share/cosmic-deb/scripts
 
 TAG_ARG    := $(if $(TAG),-tag $(TAG),)
 
-.PHONY: all build clean install uninstall run run-tui run-skip-deps run-only fmt vet tidy help
+.PHONY: all build clean install uninstall run run-tui run-skip-deps run-only update-repos fmt vet tidy help
 
 all: build
 
@@ -56,15 +57,15 @@ uninstall:
 
 run: build
 	@echo ">> Starting $(BINARY)..."
-	@sudo ./$(BINARY) $(TAG_ARG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS)
+	@sudo ./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS)
 
 run-tui: build
 	@echo ">> Starting $(BINARY) in TUI mode..."
-	@sudo ./$(BINARY) $(TAG_ARG) -tui
+	@sudo ./$(BINARY) $(TAG_ARG) -repos $(REPOS) -tui
 
 run-skip-deps: build
 	@echo ">> Starting $(BINARY) (skipping dependencies)..."
-	@sudo ./$(BINARY) $(TAG_ARG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -skip-deps
+	@sudo ./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -skip-deps
 
 run-only: build
 	@if [ -z "$(COMPONENT)" ]; then \
@@ -72,7 +73,11 @@ run-only: build
 		exit 1; \
 	fi
 	@echo ">> Starting $(BINARY) for $(COMPONENT)..."
-	@sudo ./$(BINARY) $(TAG_ARG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -only $(COMPONENT)
+	@sudo ./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -only $(COMPONENT)
+
+update-repos: build
+	@echo ">> Fetching latest epoch tags from upstream..."
+	@./$(BINARY) -repos $(REPOS) -update-repos
 
 fmt:
 	@echo ">> Formatting source code..."
@@ -96,10 +101,11 @@ help: banner
 	@echo "  uninstall          Remove installed binary and scripts"
 	@echo ""
 	@echo "Execution Commands:"
-	@echo "  run                Build and package all COSMIC components (CLI)"
+	@echo "  run                Build and package all COSMIC components"
 	@echo "  run-tui            Launch interactive TUI wizard and monitor"
 	@echo "  run-skip-deps      Build all components, skipping dependency installation"
 	@echo "  run-only           Build a specific component (requires COMPONENT=<n>)"
+	@echo "  update-repos       Fetch latest epoch tags and update repos.json"
 	@echo ""
 	@echo "Maintenance Commands:"
 	@echo "  fmt                Format Go source files"
@@ -107,9 +113,10 @@ help: banner
 	@echo "  tidy               Tidy the Go module dependencies"
 	@echo ""
 	@echo "Variables:"
-	@echo "  TAG=<tag>          Release tag, e.g. TAG=epoch-1.0.7 (optional, prompted if omitted)"
+	@echo "  TAG=<tag>          Override all repo tags, e.g. TAG=epoch-1.0.7 (optional)"
+	@echo "  REPOS=$(REPOS)      Repos config file"
 	@echo "  OUTDIR=$(OUTDIR)     Output directory"
 	@echo "  WORKDIR=$(WORKDIR)    Working directory"
 	@echo "  JOBS=$(JOBS)            Parallel jobs"
-	@echo "  COMPONENT=<n>      Component for run-only"
+	@echo "  COMPONENT=<n>      Component name for run-only"
 	@echo ""

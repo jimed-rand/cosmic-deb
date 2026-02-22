@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -18,38 +19,22 @@ import (
 )
 
 const (
-	githubOrg    = "pop-os"
-	epochRepo    = "cosmic-epoch"
-	outputPkgDir = "cosmic-packages"
-	metaPkgName  = "cosmic-desktop"
+	outputPkgDir    = "cosmic-packages"
+	metaPkgName     = "cosmic-desktop"
+	defaultReposFile = "repos.json"
 )
 
-var cosmicRepos = []string{
-	"cosmic-applets",
-	"cosmic-applibrary",
-	"cosmic-bg",
-	"cosmic-comp",
-	"cosmic-edit",
-	"cosmic-files",
-	"cosmic-greeter",
-	"cosmic-icons",
-	"cosmic-idle",
-	"cosmic-launcher",
-	"cosmic-notifications",
-	"cosmic-osd",
-	"cosmic-panel",
-	"cosmic-player",
-	"cosmic-randr",
-	"cosmic-screenshot",
-	"cosmic-session",
-	"cosmic-settings",
-	"cosmic-settings-daemon",
-	"cosmic-store",
-	"cosmic-term",
-	"cosmic-theme-extra",
-	"cosmic-wallpapers",
-	"cosmic-workspaces-epoch",
-	"xdg-desktop-portal-cosmic",
+type RepoEntry struct {
+	Name   string `json:"name"`
+	URL    string `json:"url"`
+	Tag    string `json:"tag"`
+	Branch string `json:"branch,omitempty"`
+}
+
+type ReposConfig struct {
+	GeneratedAt  string      `json:"generated_at"`
+	EpochLatest  string      `json:"epoch_latest"`
+	Repos        []RepoEntry `json:"repos"`
 }
 
 var buildDeps = []string{
@@ -93,12 +78,14 @@ var runtimeDeps = []string{
 }
 
 type Config struct {
-	tag             string
+	globalTag       string
+	reposFile       string
 	workDir         string
 	outDir          string
 	jobs            int
 	skipDeps        bool
 	only            string
+	updateRepos     bool
 	maintainerName  string
 	maintainerEmail string
 }
@@ -203,15 +190,27 @@ func installBuildDeps() {
 	}
 }
 
-func getEpochTags() []string {
-	repoURL := fmt.Sprintf("https://github.com/%s/%s.git", githubOrg, epochRepo)
+func loadReposConfig(path string) *ReposConfig {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		die("Failed to read repos config at '%s': %v\nRun with -update-repos to generate it.", path, err)
+	}
+	var cfg ReposConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		die("Failed to parse repos config '%s': %v", path, err)
+	}
+	if len(cfg.Repos) == 0 {
+		die("Repos config '%s' contains no repositories", path)
+	}
+	return &cfg
+}
+
+func latestEpochTag(repoURL string) string {
 	cmd := exec.Command("git", "ls-remote", "--tags", "--sort=-version:refname", repoURL)
 	out, err := cmd.Output()
 	if err != nil {
-		return nil
+		return ""
 	}
-	seen := make(map[string]bool)
-	var tags []string
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		parts := strings.Fields(line)
 		if len(parts) != 2 {
@@ -222,15 +221,77 @@ func getEpochTags() []string {
 			continue
 		}
 		tag := strings.TrimPrefix(ref, "refs/tags/")
-		if !strings.HasPrefix(tag, "epoch-") {
-			continue
-		}
-		if !seen[tag] {
-			seen[tag] = true
-			tags = append(tags, tag)
+		if strings.HasPrefix(tag, "epoch-") {
+			return tag
 		}
 	}
-	return tags
+	return ""
+}
+
+func updateReposConfig(path string, existing *ReposConfig) *ReposConfig {
+	log("Updating repos config from upstream tags...")
+	updated := &ReposConfig{
+		GeneratedAt: time.Now().Format("2006-01-02"),
+		Repos:       make([]RepoEntry, 0, len(existing.Repos)),
+	}
+	latestEpoch := ""
+	for _, repo := range existing.Repos {
+		entry := RepoEntry{
+			Name:   repo.Name,
+			URL:    repo.URL,
+			Branch: repo.Branch,
+		}
+		tag := latestEpochTag(repo.URL + ".git")
+		if tag != "" {
+			entry.Tag = tag
+			if latestEpoch == "" {
+				latestEpoch = tag
+			}
+			log("  %-40s %s", repo.Name, tag)
+		} else if repo.Branch != "" {
+			entry.Tag = ""
+			log("  %-40s (no epoch tag, using branch: %s)", repo.Name, repo.Branch)
+		} else {
+			entry.Tag = repo.Tag
+			log("  %-40s (unchanged: %s)", repo.Name, repo.Tag)
+		}
+		updated.Repos = append(updated.Repos, entry)
+	}
+	if latestEpoch != "" {
+		updated.EpochLatest = latestEpoch
+	} else {
+		updated.EpochLatest = existing.EpochLatest
+	}
+	data, err := json.MarshalIndent(updated, "", "  ")
+	if err != nil {
+		die("Failed to serialise updated repos config: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		die("Failed to write updated repos config to '%s': %v", path, err)
+	}
+	log("Repos config written to: %s (epoch_latest: %s)", path, updated.EpochLatest)
+	return updated
+}
+
+func effectiveTag(repo RepoEntry, globalTag string) string {
+	if globalTag != "" {
+		return globalTag
+	}
+	if repo.Tag != "" {
+		return repo.Tag
+	}
+	return ""
+}
+
+func archiveURL(repo RepoEntry, tag string) string {
+	if tag != "" {
+		return fmt.Sprintf("%s/archive/refs/tags/%s.tar.gz", repo.URL, tag)
+	}
+	branch := repo.Branch
+	if branch == "" {
+		branch = "master"
+	}
+	return fmt.Sprintf("%s/archive/refs/heads/%s.tar.gz", repo.URL, branch)
 }
 
 func detectExtractedDir(workDir, tarPath string) (string, error) {
@@ -247,36 +308,36 @@ func detectExtractedDir(workDir, tarPath string) (string, error) {
 	return filepath.Join(workDir, topDir), nil
 }
 
-func downloadSource(workDir, repo, tag string) string {
-	dest := filepath.Join(workDir, repo)
+func downloadSource(workDir string, repo RepoEntry, tag string) string {
+	dest := filepath.Join(workDir, repo.Name)
 	if _, err := os.Stat(dest); err == nil {
-		log("Source already present: %s", repo)
+		log("Source already present: %s", repo.Name)
 		return dest
 	}
-	url := fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz", githubOrg, repo, tag)
-	tarPath := filepath.Join(workDir, repo+".tar.gz")
-	log("Downloading source archive: %s (%s)", repo, tag)
+	url := archiveURL(repo, tag)
+	tarPath := filepath.Join(workDir, repo.Name+".tar.gz")
+	log("Downloading source archive: %s", repo.Name)
 	if err := run(workDir, "curl", "-fSL", "-o", tarPath, url); err != nil {
-		die("Failed to download source for %s: %v", repo, err)
+		die("Failed to download source for %s: %v", repo.Name, err)
 	}
 	extractedDir, err := detectExtractedDir(workDir, tarPath)
 	if err != nil {
-		die("Failed to detect extracted directory for %s: %v", repo, err)
+		die("Failed to detect extracted directory for %s: %v", repo.Name, err)
 	}
 	if err := run(workDir, "tar", "-xzf", tarPath); err != nil {
-		die("Failed to extract source for %s: %v", repo, err)
+		die("Failed to extract source for %s: %v", repo.Name, err)
 	}
 	if _, err := os.Stat(extractedDir); err != nil {
-		die("Expected extracted directory not found for %s: %s", repo, extractedDir)
+		die("Expected extracted directory not found for %s: %s", repo.Name, extractedDir)
 	}
 	if err := os.Rename(extractedDir, dest); err != nil {
-		die("Failed to rename extracted directory for %s: %v", repo, err)
+		die("Failed to rename extracted directory for %s: %v", repo.Name, err)
 	}
 	_ = os.Remove(tarPath)
 	return dest
 }
 
-func getVersion(repoDir, fallbackBase string) string {
+func getVersion(repoDir, fallbackTag string) string {
 	cargoPath := filepath.Join(repoDir, "Cargo.toml")
 	if _, err := os.Stat(cargoPath); err == nil {
 		if data, err := os.ReadFile(cargoPath); err == nil {
@@ -293,16 +354,16 @@ func getVersion(repoDir, fallbackBase string) string {
 			}
 		}
 	}
-	if fallbackBase != "" {
-		v := strings.TrimPrefix(fallbackBase, "epoch-")
+	if fallbackTag != "" {
+		v := strings.TrimPrefix(fallbackTag, "epoch-")
 		v = strings.TrimPrefix(v, "v")
 		return v
 	}
 	return "0.1.0"
 }
 
-func buildRepo(repoDir, repo string, jobs int) error {
-	log("Building component: %s", repo)
+func buildRepo(repoDir, repoName string, jobs int) error {
+	log("Building component: %s", repoName)
 	if _, err := os.Stat(filepath.Join(repoDir, "justfile")); err == nil {
 		return run(repoDir, "just", fmt.Sprintf("-j%d", jobs), "build")
 	}
@@ -365,9 +426,7 @@ func buildMetaPackage(cfg *Config, outDir, version string, builtRepos []string) 
 	}
 	var deps []string
 	deps = append(deps, runtimeDeps...)
-	for _, repo := range builtRepos {
-		deps = append(deps, repo)
-	}
+	deps = append(deps, builtRepos...)
 	depStr := strings.Join(deps, ", ")
 	maintainer := fmt.Sprintf("%s <%s>", cfg.maintainerName, cfg.maintainerEmail)
 	control := fmt.Sprintf(`Package: %s
@@ -390,34 +449,42 @@ Description: COSMIC Desktop Environment meta package
 	return run("", "dpkg-deb", "--build", stageDir, pkgFile)
 }
 
-func processRepo(cfg *Config, repo string) bool {
-	log("Processing component: %s", repo)
-	repoDir := downloadSource(cfg.workDir, repo, cfg.tag)
-	version := getVersion(repoDir, cfg.tag)
-	if err := buildRepo(repoDir, repo, cfg.jobs); err != nil {
-		log("Warning: Build failed for %s: %v", repo, err)
+func processRepo(cfg *Config, repo RepoEntry) bool {
+	tag := effectiveTag(repo, cfg.globalTag)
+	log("Processing component: %s (tag: %s)", repo.Name, func() string {
+		if tag == "" {
+			return "branch:" + repo.Branch
+		}
+		return tag
+	}())
+	repoDir := downloadSource(cfg.workDir, repo, tag)
+	version := getVersion(repoDir, tag)
+	if err := buildRepo(repoDir, repo.Name, cfg.jobs); err != nil {
+		log("Warning: Build failed for %s: %v", repo.Name, err)
 		return false
 	}
-	stageDir := filepath.Join(cfg.workDir, repo+"-stage")
+	stageDir := filepath.Join(cfg.workDir, repo.Name+"-stage")
 	if err := os.MkdirAll(stageDir, 0755); err != nil {
 		die("Failed to create staging directory: %v", err)
 	}
 	if err := installToStage(repoDir, stageDir); err != nil {
-		log("Warning: Installation to staging directory failed for %s: %v", repo, err)
+		log("Warning: Installation to staging directory failed for %s: %v", repo.Name, err)
 		return false
 	}
-	if err := buildDebianPackage(cfg, stageDir, cfg.outDir, repo, version, runtimeDeps); err != nil {
-		log("Warning: Debian package build failed for %s: %v", repo, err)
+	if err := buildDebianPackage(cfg, stageDir, cfg.outDir, repo.Name, version, runtimeDeps); err != nil {
+		log("Warning: Debian package build failed for %s: %v", repo.Name, err)
 		return false
 	}
-	log("Successfully packaged %s at version %s", repo, version)
+	log("Successfully packaged %s at version %s", repo.Name, version)
 	return true
 }
 
 func main() {
 	cfg := &Config{}
 	useTui := flag.Bool("tui", false, "Launch interactive TUI wizard")
-	flag.StringVar(&cfg.tag, "tag", "", "Upstream COSMIC epoch release tag (e.g. epoch-1.0.7). When omitted, available tags are fetched and presented interactively.")
+	flag.StringVar(&cfg.globalTag, "tag", "", "Override tag for all repos (e.g. epoch-1.0.7). When omitted, per-repo tags from repos.json are used.")
+	flag.StringVar(&cfg.reposFile, "repos", defaultReposFile, "Path to repos JSON config file")
+	flag.BoolVar(&cfg.updateRepos, "update-repos", false, "Fetch latest epoch tags from upstream and rewrite the repos config file, then exit")
 	flag.StringVar(&cfg.workDir, "workdir", "cosmic-work", "Working directory for source checkout and compilation")
 	flag.StringVar(&cfg.outDir, "outdir", outputPkgDir, "Output directory for produced .deb packages")
 	flag.IntVar(&cfg.jobs, "jobs", runtime.NumCPU(), "Number of parallel compilation jobs")
@@ -430,18 +497,26 @@ func main() {
 	checkMinVersion(distroID, codename)
 	log("Detected distribution: %s %s", distroID, codename)
 
-	var tags []string
-	if cfg.tag == "" {
-		log("Fetching available epoch tags via git ls-remote...")
-		tags = getEpochTags()
-		if len(tags) == 0 {
-			die("Failed to retrieve epoch tags from %s/%s. Ensure git is installed and the host has network access to github.com. Alternatively, pass -tag <tag> directly.", githubOrg, epochRepo)
+	reposCfg := loadReposConfig(cfg.reposFile)
+
+	if cfg.updateRepos {
+		updateReposConfig(cfg.reposFile, reposCfg)
+		os.Exit(0)
+	}
+
+	log("Loaded %d repos from %s (epoch_latest: %s)", len(reposCfg.Repos), cfg.reposFile, reposCfg.EpochLatest)
+
+	var epochTags []string
+	seen := make(map[string]bool)
+	for _, r := range reposCfg.Repos {
+		if r.Tag != "" && !seen[r.Tag] {
+			seen[r.Tag] = true
+			epochTags = append(epochTags, r.Tag)
 		}
-		log("Found %d epoch tag(s)", len(tags))
 	}
 
 	if *useTui {
-		choices, confirmed, err := tui.RunWizard(distroID, codename, tags)
+		choices, confirmed, err := tui.RunWizard(distroID, codename, epochTags)
 		if err != nil {
 			die("TUI failure: %v", err)
 		}
@@ -450,8 +525,8 @@ func main() {
 		}
 		cfg.maintainerName = choices["maintainer_name"]
 		cfg.maintainerEmail = choices["maintainer_email"]
-		if cfg.tag == "" {
-			cfg.tag = choices["release"]
+		if cfg.globalTag == "" {
+			cfg.globalTag = choices["release"]
 		}
 		cfg.workDir = choices["workdir"]
 		cfg.outDir = choices["outdir"]
@@ -475,30 +550,33 @@ func main() {
 			cfg.maintainerEmail = "cosmic-deb@example.com"
 		}
 
-		if cfg.tag == "" {
-			fmt.Println("Available epoch tags:")
-			limit := len(tags)
+		if cfg.globalTag == "" && len(epochTags) > 1 {
+			fmt.Println("Available epoch tags (from repos.json):")
+			limit := len(epochTags)
 			if limit > 10 {
 				limit = 10
 			}
 			for i := 0; i < limit; i++ {
-				fmt.Printf("  [%d] %s\n", i, tags[i])
+				fmt.Printf("  [%d] %s\n", i, epochTags[i])
 			}
-			fmt.Print("Select tag index [0]: ")
+			fmt.Printf("  [*] Use per-repo tags from repos.json\n")
+			fmt.Print("Select tag index (or press Enter to use per-repo tags): ")
 			idxStr, _ := reader.ReadString('\n')
 			idxStr = strings.TrimSpace(idxStr)
-			idx := 0
 			if idxStr != "" {
-				idx, _ = strconv.Atoi(idxStr)
+				idx, err := strconv.Atoi(idxStr)
+				if err == nil && idx >= 0 && idx < len(epochTags) {
+					cfg.globalTag = epochTags[idx]
+				}
 			}
-			if idx < 0 || idx >= len(tags) {
-				idx = 0
-			}
-			cfg.tag = tags[idx]
 		}
 	}
 
-	log("Selected release tag: %s", cfg.tag)
+	if cfg.globalTag != "" {
+		log("Global tag override: %s (applied to all repos)", cfg.globalTag)
+	} else {
+		log("Using per-repo tags from: %s", cfg.reposFile)
+	}
 
 	buildFunc := func() {
 		if !cfg.skipDeps {
@@ -511,24 +589,38 @@ func main() {
 			die("Failed to create output directory: %v", err)
 		}
 
-		repos := cosmicRepos
+		repos := reposCfg.Repos
 		if cfg.only != "" {
-			repos = []string{cfg.only}
+			var found bool
+			for _, r := range reposCfg.Repos {
+				if r.Name == cfg.only {
+					repos = []RepoEntry{r}
+					found = true
+					break
+				}
+			}
+			if !found {
+				die("Component '%s' not found in repos config", cfg.only)
+			}
 		}
 
 		total := len(repos)
 		var builtRepos []string
 		for i, repo := range repos {
 			if tuiProg != nil {
-				tuiProg.Send(tui.ProgressMsg{Step: i + 1, Total: total, Name: repo})
+				tuiProg.Send(tui.ProgressMsg{Step: i + 1, Total: total, Name: repo.Name})
 			}
 			if processRepo(cfg, repo) {
-				builtRepos = append(builtRepos, repo)
+				builtRepos = append(builtRepos, repo.Name)
 			}
 		}
 
 		if cfg.only == "" && len(builtRepos) > 0 {
-			metaVersion := strings.TrimPrefix(cfg.tag, "epoch-")
+			metaVersion := reposCfg.EpochLatest
+			if cfg.globalTag != "" {
+				metaVersion = cfg.globalTag
+			}
+			metaVersion = strings.TrimPrefix(metaVersion, "epoch-")
 			metaVersion = strings.TrimPrefix(metaVersion, "v")
 			if err := buildMetaPackage(cfg, cfg.outDir, metaVersion, builtRepos); err != nil {
 				log("Warning: Meta package build failed: %v", err)
@@ -542,7 +634,7 @@ func main() {
 	}
 
 	if *useTui {
-		tuiProg = tea.NewProgram(tui.MonitorModel{TotalSteps: len(cosmicRepos)}, tea.WithAltScreen())
+		tuiProg = tea.NewProgram(tui.MonitorModel{TotalSteps: len(reposCfg.Repos)}, tea.WithAltScreen())
 		go buildFunc()
 		if _, err := tuiProg.Run(); err != nil {
 			die("Monitor failure: %v", err)
