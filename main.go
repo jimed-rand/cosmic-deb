@@ -493,7 +493,7 @@ func getVersion(repoDir, fallbackTag string) string {
 func buildRepo(repoDir, repoName string, jobs int) error {
 	log("Building component: %s", repoName)
 	if _, err := os.Stat(filepath.Join(repoDir, "justfile")); err == nil {
-		return run(repoDir, "just", fmt.Sprintf("-j%d", jobs), "build")
+		return run(repoDir, "just", "build")
 	}
 	if _, err := os.Stat(filepath.Join(repoDir, "Makefile")); err == nil {
 		return run(repoDir, "make", fmt.Sprintf("-j%d", jobs))

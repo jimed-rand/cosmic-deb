@@ -188,7 +188,9 @@ sudo bash scripts/install-local.sh /path/to/output/directory
 
 ### From a Published GitHub Release
 
-To download and install packages from the most recent published release:
+Published releases on GitHub include both the pre-compiled `cosmic-deb` builder binary and an archive of the generated COSMIC `.deb` packages.
+
+To download and install the packages from the most recent published release:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jimed-rand/cosmic-deb/main/scripts/install-release.sh | sudo bash
@@ -199,6 +201,8 @@ To target a specific release tag:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jimed-rand/cosmic-deb/main/scripts/install-release.sh | sudo bash -s -- v1.0.0
 ```
+
+You can also manually download the `cosmic-deb` binary from the [Releases page](https://github.com/jimed-rand/cosmic-deb/releases) if you wish to run the builder yourself without compiling from source.
 
 ---
 
@@ -347,4 +351,8 @@ cosmic-deb/
 
 ## Licence
 
-GPL-2.0. Each upstream COSMIC component is subject to its own licence, most commonly the GNU General Public Licence version 3.0 (GPL-3.0). Refer to the respective upstream repositories for details.
+This project (`cosmic-deb`) is licensed under the **GPL-2.0** licence.
+
+However, by using this tool to download, build, and distribute the COSMIC Desktop Environment, you are also subject to and must comply with the open source licences of the respective upstream COSMIC components. The COSMIC project and its components are primarily licensed under the **GNU General Public Licence version 3.0 (GPL-3.0)** alongside other compatible open-source licences.
+
+Please refer to the upstream [pop-os](https://github.com/pop-os) repositories for the exact licensing details and terms of each individual component.
