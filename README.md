@@ -47,23 +47,26 @@ The following command initiates the full build pipeline. Root privileges are req
 sudo ./cosmic-deb
 ```
 
-When launched without the `-tag` flag, the tool fetches the list of available COSMIC Epoch releases from GitHub and presents an interactive selection prompt. To bypass this prompt entirely, specify the desired tag directly:
+When launched without the `-tag` flag, the tool uses `git ls-remote` to enumerate available `epoch-*` tags directly from the upstream `cosmic-epoch` repository without requiring a GitHub API token. The available tags are presented in an interactive selection prompt. To bypass the prompt entirely, specify the desired tag directly:
 
 ```bash
 sudo ./cosmic-deb -tag epoch-1.0.7
 ```
 
-Alternatively, via the provided Makefile target:
+### Meta Package
+
+Upon successful completion of a full build (i.e. without `-only`), a `cosmic-desktop` meta package is produced in addition to the individual component packages. This meta package declares dependencies on all successfully built COSMIC components and their runtime libraries, enabling a single `dpkg -i` invocation to install the entire desktop environment:
 
 ```bash
-make run
+sudo dpkg -i cosmic-packages/cosmic-desktop_*.deb
+sudo apt-get install -f
 ```
 
 ### Command-Line Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-tag` | _(empty)_ | The upstream COSMIC epoch release tag to build from (e.g. `epoch-1.0.7`). When omitted, an interactive release selection prompt is shown. |
+| `-tag` | _(empty)_ | The upstream COSMIC epoch release tag (e.g. `epoch-1.0.7`). When omitted, available tags are fetched and presented interactively. |
 | `-workdir` | `cosmic-work` | Working directory for source checkout and compilation |
 | `-outdir` | `cosmic-packages` | Output directory for the produced `.deb` packages |
 | `-jobs` | CPU count | Number of parallel compilation jobs |
@@ -85,19 +88,15 @@ sudo ./cosmic-deb -workdir /mnt/build -outdir /mnt/debs
 
 ## How Source Archives Are Fetched
 
-For each COSMIC component, the tool downloads the upstream source archive from GitHub as a `.tar.gz` tarball using the selected epoch release tag:
+Available epoch tags are retrieved by running `git ls-remote --tags` against the upstream `cosmic-epoch` repository. This approach requires no GitHub API token and is not subject to API rate limiting.
+
+For each COSMIC component, the source archive is downloaded directly from GitHub as a `.tar.gz` tarball using the selected epoch release tag:
 
 ```
 https://github.com/pop-os/<component>/archive/refs/tags/<tag>.tar.gz
 ```
 
-The tool uses `tar tzf` to inspect the archive and determine the exact extracted directory name before extraction, which eliminates guesswork around GitHub's directory naming convention. The archive is removed after successful extraction.
-
-Available releases are retrieved from the GitHub Releases API using proper JSON parsing:
-
-```
-https://api.github.com/repos/pop-os/cosmic-epoch/releases
-```
+The tool uses `tar -tzf` to inspect the archive and determine the exact top-level directory name before extraction, eliminating guesswork around GitHub's naming convention. The archive is removed after successful extraction.
 
 ---
 
@@ -105,7 +104,14 @@ https://api.github.com/repos/pop-os/cosmic-epoch/releases
 
 ### From a Local Build
 
-Upon successful completion of the build pipeline, produced `.deb` packages reside in the designated output directory. To install them onto the current system:
+Upon successful completion of the build pipeline, produced `.deb` packages reside in the designated output directory. To install the entire COSMIC desktop environment using the generated meta package:
+
+```bash
+sudo dpkg -i cosmic-packages/cosmic-desktop_*.deb
+sudo apt-get install -f
+```
+
+Alternatively, to install all packages directly without the meta package:
 
 ```bash
 sudo bash scripts/install-local.sh cosmic-packages
@@ -116,8 +122,6 @@ A custom output directory may be specified as an argument:
 ```bash
 sudo bash scripts/install-local.sh /path/to/output/directory
 ```
-
-This script will install all requisite runtime dependencies via `apt-get` prior to invoking `dpkg`.
 
 ### From a Published GitHub Release
 
@@ -193,14 +197,13 @@ docker run --rm -it \
   debian:bookworm bash -c \
   "apt-get update && apt-get install -y golang make git && \
    git clone https://github.com/jimed-rand/cosmic-deb.git /src && \
-   cd /src && make run OUTDIR=/output"
+   cd /src && make run TAG=epoch-1.0.7 OUTDIR=/output"
 ```
 
 **Example — installing from a release within a container:**
 
 ```bash
 docker run --rm -it \
-  -v "$(pwd)/output":/output \
   debian:bookworm bash -c \
   "apt-get update && apt-get install -y curl && \
    curl -fsSL https://raw.githubusercontent.com/jimed-rand/cosmic-deb/main/scripts/install-release.sh | bash"
@@ -237,6 +240,8 @@ The following upstream repositories from the [pop-os](https://github.com/pop-os)
 - `cosmic-wallpapers`
 - `cosmic-workspaces-epoch`
 - `xdg-desktop-portal-cosmic`
+
+A `cosmic-desktop` meta package is also produced upon a full build, declaring dependencies on all of the above components.
 
 ---
 

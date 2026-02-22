@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -22,6 +21,7 @@ const (
 	githubOrg    = "pop-os"
 	epochRepo    = "cosmic-epoch"
 	outputPkgDir = "cosmic-packages"
+	metaPkgName  = "cosmic-desktop"
 )
 
 var cosmicRepos = []string{
@@ -103,11 +103,6 @@ type Config struct {
 	maintainerEmail string
 }
 
-type githubRelease struct {
-	TagName    string `json:"tag_name"`
-	Prerelease bool   `json:"prerelease"`
-}
-
 var tuiProg *tea.Program
 
 func log(format string, args ...any) {
@@ -179,7 +174,7 @@ func checkMinVersion(id, codename string) {
 	switch id {
 	case "debian":
 		if !debianMinimum[codename] {
-			die("Debian release '%s' is not supported. The minimum supported release is bookworm (12)", codename)
+			die("Debian release '%s' is not supported. Minimum supported release is bookworm (12)", codename)
 		}
 	case "ubuntu":
 		if !ubuntuMinimum[codename] {
@@ -208,24 +203,32 @@ func installBuildDeps() {
 	}
 }
 
-func getReleases() []string {
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", githubOrg, epochRepo)
-	cmd := exec.Command("curl", "-fsSL",
-		"-H", "Accept: application/vnd.github+json",
-		"-H", "X-GitHub-Api-Version: 2022-11-28",
-		apiURL,
-	)
+func getEpochTags() []string {
+	repoURL := fmt.Sprintf("https://github.com/%s/%s.git", githubOrg, epochRepo)
+	cmd := exec.Command("git", "ls-remote", "--tags", "--sort=-version:refname", repoURL)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
 	}
-	var releases []githubRelease
-	if err := json.Unmarshal(out, &releases); err != nil {
-		return nil
-	}
+	seen := make(map[string]bool)
 	var tags []string
-	for _, r := range releases {
-		tags = append(tags, r.TagName)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.Fields(line)
+		if len(parts) != 2 {
+			continue
+		}
+		ref := parts[1]
+		if strings.HasSuffix(ref, "^{}") {
+			continue
+		}
+		tag := strings.TrimPrefix(ref, "refs/tags/")
+		if !strings.HasPrefix(tag, "epoch-") {
+			continue
+		}
+		if !seen[tag] {
+			seen[tag] = true
+			tags = append(tags, tag)
+		}
 	}
 	return tags
 }
@@ -351,13 +354,49 @@ Description: COSMIC Desktop Environment component — %s
 	return run("", "dpkg-deb", "--build", stageDir, pkgFile)
 }
 
-func processRepo(cfg *Config, repo string) {
+func buildMetaPackage(cfg *Config, outDir, version string, builtRepos []string) error {
+	arch := "amd64"
+	if runtime.GOARCH == "arm64" {
+		arch = "arm64"
+	}
+	stageDir := filepath.Join(cfg.workDir, metaPkgName+"-stage")
+	if err := os.MkdirAll(filepath.Join(stageDir, "DEBIAN"), 0755); err != nil {
+		return err
+	}
+	var deps []string
+	deps = append(deps, runtimeDeps...)
+	for _, repo := range builtRepos {
+		deps = append(deps, repo)
+	}
+	depStr := strings.Join(deps, ", ")
+	maintainer := fmt.Sprintf("%s <%s>", cfg.maintainerName, cfg.maintainerEmail)
+	control := fmt.Sprintf(`Package: %s
+Version: %s
+Section: x11
+Priority: optional
+Architecture: %s
+Depends: %s
+Maintainer: %s
+Description: COSMIC Desktop Environment meta package
+ This meta package installs the complete COSMIC Desktop Environment
+ by declaring dependencies on all COSMIC component packages built
+ by the cosmic-deb build tool.
+`, metaPkgName, version, arch, depStr, maintainer)
+	if err := os.WriteFile(filepath.Join(stageDir, "DEBIAN", "control"), []byte(control), 0644); err != nil {
+		return err
+	}
+	pkgFile := filepath.Join(outDir, fmt.Sprintf("%s_%s_%s.deb", metaPkgName, version, arch))
+	log("Building meta package: %s", metaPkgName)
+	return run("", "dpkg-deb", "--build", stageDir, pkgFile)
+}
+
+func processRepo(cfg *Config, repo string) bool {
 	log("Processing component: %s", repo)
 	repoDir := downloadSource(cfg.workDir, repo, cfg.tag)
 	version := getVersion(repoDir, cfg.tag)
 	if err := buildRepo(repoDir, repo, cfg.jobs); err != nil {
 		log("Warning: Build failed for %s: %v", repo, err)
-		return
+		return false
 	}
 	stageDir := filepath.Join(cfg.workDir, repo+"-stage")
 	if err := os.MkdirAll(stageDir, 0755); err != nil {
@@ -365,19 +404,20 @@ func processRepo(cfg *Config, repo string) {
 	}
 	if err := installToStage(repoDir, stageDir); err != nil {
 		log("Warning: Installation to staging directory failed for %s: %v", repo, err)
-		return
+		return false
 	}
 	if err := buildDebianPackage(cfg, stageDir, cfg.outDir, repo, version, runtimeDeps); err != nil {
 		log("Warning: Debian package build failed for %s: %v", repo, err)
-		return
+		return false
 	}
 	log("Successfully packaged %s at version %s", repo, version)
+	return true
 }
 
 func main() {
 	cfg := &Config{}
 	useTui := flag.Bool("tui", false, "Launch interactive TUI wizard")
-	flag.StringVar(&cfg.tag, "tag", "", "Upstream COSMIC epoch release tag to build from (e.g. epoch-1.0.7)")
+	flag.StringVar(&cfg.tag, "tag", "", "Upstream COSMIC epoch release tag (e.g. epoch-1.0.7). When omitted, available tags are fetched and presented interactively.")
 	flag.StringVar(&cfg.workDir, "workdir", "cosmic-work", "Working directory for source checkout and compilation")
 	flag.StringVar(&cfg.outDir, "outdir", outputPkgDir, "Output directory for produced .deb packages")
 	flag.IntVar(&cfg.jobs, "jobs", runtime.NumCPU(), "Number of parallel compilation jobs")
@@ -390,17 +430,18 @@ func main() {
 	checkMinVersion(distroID, codename)
 	log("Detected distribution: %s %s", distroID, codename)
 
-	var releases []string
+	var tags []string
 	if cfg.tag == "" {
-		log("Fetching available releases from GitHub...")
-		releases = getReleases()
-		if len(releases) == 0 {
-			die("Failed to fetch releases from GitHub")
+		log("Fetching available epoch tags via git ls-remote...")
+		tags = getEpochTags()
+		if len(tags) == 0 {
+			die("Failed to retrieve epoch tags from %s/%s. Ensure git is installed and the host has network access to github.com. Alternatively, pass -tag <tag> directly.", githubOrg, epochRepo)
 		}
+		log("Found %d epoch tag(s)", len(tags))
 	}
 
 	if *useTui {
-		choices, confirmed, err := tui.RunWizard(distroID, codename, releases)
+		choices, confirmed, err := tui.RunWizard(distroID, codename, tags)
 		if err != nil {
 			die("TUI failure: %v", err)
 		}
@@ -435,25 +476,25 @@ func main() {
 		}
 
 		if cfg.tag == "" {
-			fmt.Println("Available releases:")
-			limit := len(releases)
+			fmt.Println("Available epoch tags:")
+			limit := len(tags)
 			if limit > 10 {
 				limit = 10
 			}
 			for i := 0; i < limit; i++ {
-				fmt.Printf("  [%d] %s\n", i, releases[i])
+				fmt.Printf("  [%d] %s\n", i, tags[i])
 			}
-			fmt.Print("Select release index [0]: ")
+			fmt.Print("Select tag index [0]: ")
 			idxStr, _ := reader.ReadString('\n')
 			idxStr = strings.TrimSpace(idxStr)
 			idx := 0
 			if idxStr != "" {
 				idx, _ = strconv.Atoi(idxStr)
 			}
-			if idx < 0 || idx >= len(releases) {
+			if idx < 0 || idx >= len(tags) {
 				idx = 0
 			}
-			cfg.tag = releases[idx]
+			cfg.tag = tags[idx]
 		}
 	}
 
@@ -469,17 +510,31 @@ func main() {
 		if err := os.MkdirAll(cfg.outDir, 0755); err != nil {
 			die("Failed to create output directory: %v", err)
 		}
+
 		repos := cosmicRepos
 		if cfg.only != "" {
 			repos = []string{cfg.only}
 		}
+
 		total := len(repos)
+		var builtRepos []string
 		for i, repo := range repos {
 			if tuiProg != nil {
 				tuiProg.Send(tui.ProgressMsg{Step: i + 1, Total: total, Name: repo})
 			}
-			processRepo(cfg, repo)
+			if processRepo(cfg, repo) {
+				builtRepos = append(builtRepos, repo)
+			}
 		}
+
+		if cfg.only == "" && len(builtRepos) > 0 {
+			metaVersion := strings.TrimPrefix(cfg.tag, "epoch-")
+			metaVersion = strings.TrimPrefix(metaVersion, "v")
+			if err := buildMetaPackage(cfg, cfg.outDir, metaVersion, builtRepos); err != nil {
+				log("Warning: Meta package build failed: %v", err)
+			}
+		}
+
 		log("All packages have been written to: %s", cfg.outDir)
 		if tuiProg != nil {
 			tuiProg.Send(tui.DoneMsg{})
@@ -494,6 +549,6 @@ func main() {
 		}
 	} else {
 		buildFunc()
-		log("To install, run: sudo bash scripts/install-local.sh %s", cfg.outDir)
+		log("To install all COSMIC components at once, run: sudo bash scripts/install-local.sh %s", cfg.outDir)
 	}
 }

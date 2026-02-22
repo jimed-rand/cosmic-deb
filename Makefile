@@ -4,13 +4,16 @@ GOFLAGS    := -trimpath
 LDFLAGS    := -s -w
 OUTDIR     := cosmic-packages
 WORKDIR    := cosmic-work
+TAG        :=
 JOBS       := $(shell nproc)
 DESTDIR    :=
 PREFIX     := /usr/local
 BINDIR     := $(DESTDIR)$(PREFIX)/bin
 SCRIPTDIR  := $(DESTDIR)$(PREFIX)/share/cosmic-deb/scripts
 
-.PHONY: all build clean install uninstall run run-only fmt vet tidy help
+TAG_ARG    := $(if $(TAG),-tag $(TAG),)
+
+.PHONY: all build clean install uninstall run run-tui run-skip-deps run-only fmt vet tidy help
 
 all: build
 
@@ -53,23 +56,23 @@ uninstall:
 
 run: build
 	@echo ">> Starting $(BINARY)..."
-	@sudo ./$(BINARY) -tag $(TAG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS)
+	@sudo ./$(BINARY) $(TAG_ARG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS)
 
 run-tui: build
 	@echo ">> Starting $(BINARY) in TUI mode..."
-	@sudo ./$(BINARY) --tui
+	@sudo ./$(BINARY) $(TAG_ARG) -tui
 
 run-skip-deps: build
 	@echo ">> Starting $(BINARY) (skipping dependencies)..."
-	@sudo ./$(BINARY) -tag $(TAG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -skip-deps
+	@sudo ./$(BINARY) $(TAG_ARG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -skip-deps
 
 run-only: build
 	@if [ -z "$(COMPONENT)" ]; then \
-		echo "ERROR: Specify a component with COMPONENT=<name>, e.g. make run-only COMPONENT=cosmic-term"; \
+		echo "ERROR: Specify a component with COMPONENT=<n>, e.g. make run-only COMPONENT=cosmic-term"; \
 		exit 1; \
 	fi
 	@echo ">> Starting $(BINARY) for $(COMPONENT)..."
-	@sudo ./$(BINARY) -tag $(TAG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -only $(COMPONENT)
+	@sudo ./$(BINARY) $(TAG_ARG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -only $(COMPONENT)
 
 fmt:
 	@echo ">> Formatting source code..."
@@ -96,7 +99,7 @@ help: banner
 	@echo "  run                Build and package all COSMIC components (CLI)"
 	@echo "  run-tui            Launch interactive TUI wizard and monitor"
 	@echo "  run-skip-deps      Build all components, skipping dependency installation"
-	@echo "  run-only           Build a specific component (requires COMPONENT=<name>)"
+	@echo "  run-only           Build a specific component (requires COMPONENT=<n>)"
 	@echo ""
 	@echo "Maintenance Commands:"
 	@echo "  fmt                Format Go source files"
@@ -104,9 +107,9 @@ help: banner
 	@echo "  tidy               Tidy the Go module dependencies"
 	@echo ""
 	@echo "Variables:"
-	@echo "  TAG=<tag>          Release tag (e.g. TAG=epoch-1.0.7)"
+	@echo "  TAG=<tag>          Release tag, e.g. TAG=epoch-1.0.7 (optional, prompted if omitted)"
 	@echo "  OUTDIR=$(OUTDIR)     Output directory"
 	@echo "  WORKDIR=$(WORKDIR)    Working directory"
 	@echo "  JOBS=$(JOBS)            Parallel jobs"
-	@echo "  COMPONENT=<name>   Component for run-only"
+	@echo "  COMPONENT=<n>      Component for run-only"
 	@echo ""
