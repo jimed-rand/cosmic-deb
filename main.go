@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	outputPkgDir    = "cosmic-packages"
-	metaPkgName     = "cosmic-desktop"
+	outputPkgDir     = "cosmic-packages"
+	metaPkgName      = "cosmic-desktop"
 	defaultReposFile = "repos.json"
 )
 
@@ -32,9 +32,9 @@ type RepoEntry struct {
 }
 
 type ReposConfig struct {
-	GeneratedAt  string      `json:"generated_at"`
-	EpochLatest  string      `json:"epoch_latest"`
-	Repos        []RepoEntry `json:"repos"`
+	GeneratedAt string      `json:"generated_at"`
+	EpochLatest string      `json:"epoch_latest"`
+	Repos       []RepoEntry `json:"repos"`
 }
 
 var buildDeps = []string{
@@ -190,19 +190,35 @@ func installBuildDeps() {
 	}
 }
 
-func loadReposConfig(path string) *ReposConfig {
-	data, err := os.ReadFile(path)
+func loadReposConfig(path string) (*ReposConfig, string) {
+	paths := []string{path}
+	if !filepath.IsAbs(path) {
+		if exe, err := os.Executable(); err == nil {
+			paths = append(paths, filepath.Join(filepath.Dir(exe), path))
+		}
+		paths = append(paths, filepath.Join("/usr/share/cosmic-deb", path))
+	}
+	var data []byte
+	var err error
+	var foundPath string
+	for _, p := range paths {
+		data, err = os.ReadFile(p)
+		if err == nil {
+			foundPath = p
+			break
+		}
+	}
 	if err != nil {
-		die("Failed to read repos config at '%s': %v\nRun with -update-repos to generate it.", path, err)
+		die("Failed to read repos config at '%s' (searched in %v). Run with -update-repos to generate it.", path, paths)
 	}
 	var cfg ReposConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		die("Failed to parse repos config '%s': %v", path, err)
+		die("Failed to parse repos config '%s': %v", foundPath, err)
 	}
 	if len(cfg.Repos) == 0 {
-		die("Repos config '%s' contains no repositories", path)
+		die("Repos config '%s' contains no repositories", foundPath)
 	}
-	return &cfg
+	return &cfg, foundPath
 }
 
 func latestEpochTag(repoURL string) string {
@@ -315,16 +331,17 @@ func downloadSource(workDir string, repo RepoEntry, tag string) string {
 		return dest
 	}
 	url := archiveURL(repo, tag)
-	tarPath := filepath.Join(workDir, repo.Name+".tar.gz")
+	tarName := repo.Name + ".tar.gz"
+	tarPath := filepath.Join(workDir, tarName)
 	log("Downloading source archive: %s", repo.Name)
-	if err := run(workDir, "curl", "-fSL", "-o", tarPath, url); err != nil {
+	if err := run("", "curl", "-fSL", "-o", tarPath, url); err != nil {
 		die("Failed to download source for %s: %v", repo.Name, err)
 	}
 	extractedDir, err := detectExtractedDir(workDir, tarPath)
 	if err != nil {
 		die("Failed to detect extracted directory for %s: %v", repo.Name, err)
 	}
-	if err := run(workDir, "tar", "-xzf", tarPath); err != nil {
+	if err := run(workDir, "tar", "-xzf", tarName); err != nil {
 		die("Failed to extract source for %s: %v", repo.Name, err)
 	}
 	if _, err := os.Stat(extractedDir); err != nil {
@@ -497,14 +514,12 @@ func main() {
 	checkMinVersion(distroID, codename)
 	log("Detected distribution: %s %s", distroID, codename)
 
-	reposCfg := loadReposConfig(cfg.reposFile)
-
+	reposCfg, actualReposFile := loadReposConfig(cfg.reposFile)
 	if cfg.updateRepos {
-		updateReposConfig(cfg.reposFile, reposCfg)
+		updateReposConfig(actualReposFile, reposCfg)
 		os.Exit(0)
 	}
-
-	log("Loaded %d repos from %s (epoch_latest: %s)", len(reposCfg.Repos), cfg.reposFile, reposCfg.EpochLatest)
+	log("Loaded %d repos from %s (epoch_latest: %s)", len(reposCfg.Repos), actualReposFile, reposCfg.EpochLatest)
 
 	var epochTags []string
 	seen := make(map[string]bool)
@@ -575,7 +590,7 @@ func main() {
 	if cfg.globalTag != "" {
 		log("Global tag override: %s (applied to all repos)", cfg.globalTag)
 	} else {
-		log("Using per-repo tags from: %s", cfg.reposFile)
+		log("Using per-repo tags from: %s", actualReposFile)
 	}
 
 	buildFunc := func() {
