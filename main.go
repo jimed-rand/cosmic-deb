@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -54,6 +55,7 @@ var cosmicRepos = []string{
 var buildDeps = []string{
 	"build-essential",
 	"curl",
+	"git",
 	"libdbus-1-dev",
 	"libdisplay-info-dev",
 	"libflatpak-dev",
@@ -70,7 +72,6 @@ var buildDeps = []string{
 	"lld",
 	"pkg-config",
 	"rustup",
-	"unzip",
 }
 
 var runtimeDeps = []string{
@@ -100,6 +101,11 @@ type Config struct {
 	only            string
 	maintainerName  string
 	maintainerEmail string
+}
+
+type githubRelease struct {
+	TagName    string `json:"tag_name"`
+	Prerelease bool   `json:"prerelease"`
 }
 
 var tuiProg *tea.Program
@@ -195,7 +201,7 @@ func installBuildDeps() {
 		die("Failed to set rustup default to stable: %v", err)
 	}
 	if _, err := exec.LookPath("just"); err != nil {
-		log("'Just' not found; installing via cargo")
+		log("'just' not found; installing via cargo")
 		if err := run("", "cargo", "install", "just"); err != nil {
 			die("Failed to install just via cargo: %v", err)
 		}
@@ -203,32 +209,39 @@ func installBuildDeps() {
 }
 
 func getReleases() []string {
-	cmd := exec.Command("curl", "-s", "https://api.github.com/repos/"+githubOrg+"/"+epochRepo+"/releases")
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases", githubOrg, epochRepo)
+	cmd := exec.Command("curl", "-fsSL",
+		"-H", "Accept: application/vnd.github+json",
+		"-H", "X-GitHub-Api-Version: 2022-11-28",
+		apiURL,
+	)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil
 	}
-	var releases []string
-	s := string(out)
-	for {
-		idx := strings.Index(s, "\"tag_name\":")
-		if idx == -1 {
-			break
-		}
-		s = s[idx+len("\"tag_name\":"):]
-		start := strings.Index(s, "\"")
-		if start == -1 {
-			break
-		}
-		s = s[start+1:]
-		end := strings.Index(s, "\"")
-		if end == -1 {
-			break
-		}
-		releases = append(releases, s[:end])
-		s = s[end+1:]
+	var releases []githubRelease
+	if err := json.Unmarshal(out, &releases); err != nil {
+		return nil
 	}
-	return releases
+	var tags []string
+	for _, r := range releases {
+		tags = append(tags, r.TagName)
+	}
+	return tags
+}
+
+func detectExtractedDir(workDir, tarPath string) (string, error) {
+	cmd := exec.Command("tar", "-tzf", tarPath)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to list tar contents: %v", err)
+	}
+	lines := strings.SplitN(strings.TrimSpace(string(out)), "\n", 2)
+	if len(lines) == 0 || lines[0] == "" {
+		return "", fmt.Errorf("tar archive appears to be empty")
+	}
+	topDir := strings.SplitN(lines[0], "/", 2)[0]
+	return filepath.Join(workDir, topDir), nil
 }
 
 func downloadSource(workDir, repo, tag string) string {
@@ -237,33 +250,26 @@ func downloadSource(workDir, repo, tag string) string {
 		log("Source already present: %s", repo)
 		return dest
 	}
-	url := fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.zip", githubOrg, repo, tag)
-	zipPath := filepath.Join(workDir, repo+".zip")
-	log("Downloading release source: %s (%s)", repo, tag)
-	if err := run(workDir, "curl", "-fSL", "-o", zipPath, url); err != nil {
+	url := fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz", githubOrg, repo, tag)
+	tarPath := filepath.Join(workDir, repo+".tar.gz")
+	log("Downloading source archive: %s (%s)", repo, tag)
+	if err := run(workDir, "curl", "-fSL", "-o", tarPath, url); err != nil {
 		die("Failed to download source for %s: %v", repo, err)
 	}
-	if err := run(workDir, "unzip", "-q", "-o", zipPath); err != nil {
+	extractedDir, err := detectExtractedDir(workDir, tarPath)
+	if err != nil {
+		die("Failed to detect extracted directory for %s: %v", repo, err)
+	}
+	if err := run(workDir, "tar", "-xzf", tarPath); err != nil {
 		die("Failed to extract source for %s: %v", repo, err)
 	}
-	extractedDir := filepath.Join(workDir, fmt.Sprintf("%s-%s", repo, strings.TrimPrefix(tag, "v")))
-	if strings.HasPrefix(tag, "epoch-") {
-		extractedDir = filepath.Join(workDir, fmt.Sprintf("%s-%s", repo, tag))
-	}
 	if _, err := os.Stat(extractedDir); err != nil {
-		entries, _ := filepath.Glob(filepath.Join(workDir, repo+"-*"))
-		for _, e := range entries {
-			info, _ := os.Stat(e)
-			if info != nil && info.IsDir() {
-				extractedDir = e
-				break
-			}
-		}
+		die("Expected extracted directory not found for %s: %s", repo, extractedDir)
 	}
 	if err := os.Rename(extractedDir, dest); err != nil {
 		die("Failed to rename extracted directory for %s: %v", repo, err)
 	}
-	_ = os.Remove(zipPath)
+	_ = os.Remove(tarPath)
 	return dest
 }
 
@@ -276,7 +282,7 @@ func getVersion(repoDir, fallbackBase string) string {
 				line = strings.TrimSpace(line)
 				if strings.HasPrefix(line, "version") && strings.Contains(line, "=") {
 					parts := strings.SplitN(line, "=", 2)
-					v := strings.Trim(parts[1], " \"'")
+					v := strings.Trim(parts[1], ` "'`)
 					if v != "" {
 						return v
 					}
@@ -284,13 +290,11 @@ func getVersion(repoDir, fallbackBase string) string {
 			}
 		}
 	}
-
 	if fallbackBase != "" {
 		v := strings.TrimPrefix(fallbackBase, "epoch-")
 		v = strings.TrimPrefix(v, "v")
 		return v
 	}
-
 	return "0.1.0"
 }
 
@@ -373,6 +377,7 @@ func processRepo(cfg *Config, repo string) {
 func main() {
 	cfg := &Config{}
 	useTui := flag.Bool("tui", false, "Launch interactive TUI wizard")
+	flag.StringVar(&cfg.tag, "tag", "", "Upstream COSMIC epoch release tag to build from (e.g. epoch-1.0.7)")
 	flag.StringVar(&cfg.workDir, "workdir", "cosmic-work", "Working directory for source checkout and compilation")
 	flag.StringVar(&cfg.outDir, "outdir", outputPkgDir, "Output directory for produced .deb packages")
 	flag.IntVar(&cfg.jobs, "jobs", runtime.NumCPU(), "Number of parallel compilation jobs")
@@ -385,10 +390,13 @@ func main() {
 	checkMinVersion(distroID, codename)
 	log("Detected distribution: %s %s", distroID, codename)
 
-	log("Fetching releases from GitHub...")
-	releases := getReleases()
-	if len(releases) == 0 {
-		die("Failed to fetch releases from GitHub")
+	var releases []string
+	if cfg.tag == "" {
+		log("Fetching available releases from GitHub...")
+		releases = getReleases()
+		if len(releases) == 0 {
+			die("Failed to fetch releases from GitHub")
+		}
 	}
 
 	if *useTui {
@@ -401,7 +409,9 @@ func main() {
 		}
 		cfg.maintainerName = choices["maintainer_name"]
 		cfg.maintainerEmail = choices["maintainer_email"]
-		cfg.tag = choices["release"]
+		if cfg.tag == "" {
+			cfg.tag = choices["release"]
+		}
 		cfg.workDir = choices["workdir"]
 		cfg.outDir = choices["outdir"]
 		cfg.only = choices["only"]
@@ -424,24 +434,27 @@ func main() {
 			cfg.maintainerEmail = "cosmic-deb@example.com"
 		}
 
-		fmt.Printf("Available releases:\n")
-		for i, r := range releases {
-			fmt.Printf("[%d] %s\n", i, r)
-			if i >= 4 {
-				break
+		if cfg.tag == "" {
+			fmt.Println("Available releases:")
+			limit := len(releases)
+			if limit > 10 {
+				limit = 10
 			}
+			for i := 0; i < limit; i++ {
+				fmt.Printf("  [%d] %s\n", i, releases[i])
+			}
+			fmt.Print("Select release index [0]: ")
+			idxStr, _ := reader.ReadString('\n')
+			idxStr = strings.TrimSpace(idxStr)
+			idx := 0
+			if idxStr != "" {
+				idx, _ = strconv.Atoi(idxStr)
+			}
+			if idx < 0 || idx >= len(releases) {
+				idx = 0
+			}
+			cfg.tag = releases[idx]
 		}
-		fmt.Printf("Select release index [0]: ")
-		idxStr, _ := reader.ReadString('\n')
-		idxStr = strings.TrimSpace(idxStr)
-		idx := 0
-		if idxStr != "" {
-			idx, _ = strconv.Atoi(idxStr)
-		}
-		if idx < 0 || idx >= len(releases) {
-			idx = 0
-		}
-		cfg.tag = releases[idx]
 	}
 
 	log("Selected release tag: %s", cfg.tag)

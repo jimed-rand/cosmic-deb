@@ -13,7 +13,7 @@ The following distributions are supported. For Ubuntu, only LTS (Long Term Suppo
 | Distribution | Supported Releases |
 |--------------|-----------------------|
 | Debian       | 12 (bookworm) or later |
-| Ubuntu       | LTS and devel (e.g., jammy, noble, or resolute) |
+| Ubuntu       | LTS and devel (e.g., jammy, noble, or plucky) |
 
 Distributions not derived from Debian or Ubuntu are explicitly unsupported. The tool enforces APT availability at startup and will not proceed on incompatible systems.
 
@@ -47,6 +47,12 @@ The following command initiates the full build pipeline. Root privileges are req
 sudo ./cosmic-deb
 ```
 
+When launched without the `-tag` flag, the tool fetches the list of available COSMIC Epoch releases from GitHub and presents an interactive selection prompt. To bypass this prompt entirely, specify the desired tag directly:
+
+```bash
+sudo ./cosmic-deb -tag epoch-1.0.7
+```
+
 Alternatively, via the provided Makefile target:
 
 ```bash
@@ -57,21 +63,40 @@ make run
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-tag` | `epoch-1.0.0` | The upstream COSMIC epoch release tag to build from |
-| `-workdir` | `/tmp/cosmic-build` | Working directory for source checkout and compilation |
+| `-tag` | _(empty)_ | The upstream COSMIC epoch release tag to build from (e.g. `epoch-1.0.7`). When omitted, an interactive release selection prompt is shown. |
+| `-workdir` | `cosmic-work` | Working directory for source checkout and compilation |
 | `-outdir` | `cosmic-packages` | Output directory for the produced `.deb` packages |
 | `-jobs` | CPU count | Number of parallel compilation jobs |
 | `-skip-deps` | `false` | Skip automatic installation of build dependencies |
 | `-only` | _(empty)_ | Restrict the build to a single named `cosmic-*` component |
+| `-tui` | `false` | Launch the interactive TUI wizard and build monitor |
 
 ### Usage Examples
 
 ```bash
-sudo ./cosmic-deb -tag epoch-1.0.0 -jobs 8 -outdir /tmp/debs
+sudo ./cosmic-deb -tag epoch-1.0.7 -jobs 8 -outdir /tmp/debs
 
-sudo ./cosmic-deb -only cosmic-term -skip-deps
+sudo ./cosmic-deb -tag epoch-1.0.7 -only cosmic-term -skip-deps
 
 sudo ./cosmic-deb -workdir /mnt/build -outdir /mnt/debs
+```
+
+---
+
+## How Source Archives Are Fetched
+
+For each COSMIC component, the tool downloads the upstream source archive from GitHub as a `.tar.gz` tarball using the selected epoch release tag:
+
+```
+https://github.com/pop-os/<component>/archive/refs/tags/<tag>.tar.gz
+```
+
+The tool uses `tar tzf` to inspect the archive and determine the exact extracted directory name before extraction, which eliminates guesswork around GitHub's directory naming convention. The archive is removed after successful extraction.
+
+Available releases are retrieved from the GitHub Releases API using proper JSON parsing:
+
+```
+https://api.github.com/repos/pop-os/cosmic-epoch/releases
 ```
 
 ---
@@ -147,7 +172,7 @@ The following targets are available via `make`:
 The following variables may be overridden on the command line:
 
 ```bash
-make run TAG=epoch-1.0.0 JOBS=4 OUTDIR=/tmp/debs
+make run TAG=epoch-1.0.7 JOBS=4 OUTDIR=/tmp/debs
 
 make run-only COMPONENT=cosmic-term
 
@@ -243,4 +268,4 @@ cosmic-deb/
 
 ## Licence
 
-MIT Licence. Each upstream COSMIC component is subject to its own licence, most commonly the GNU General Public Licence version 3.0 (GPL-3.0). Refer to the respective upstream repositories for details.
+GPL-2.0. Each upstream COSMIC component is subject to its own licence, most commonly the GNU General Public Licence version 3.0 (GPL-3.0). Refer to the respective upstream repositories for details.

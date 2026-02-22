@@ -53,7 +53,7 @@ uninstall:
 
 run: build
 	@echo ">> Starting $(BINARY)..."
-	@sudo ./$(BINARY) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS)
+	@sudo ./$(BINARY) -tag $(TAG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS)
 
 run-tui: build
 	@echo ">> Starting $(BINARY) in TUI mode..."
@@ -61,7 +61,7 @@ run-tui: build
 
 run-skip-deps: build
 	@echo ">> Starting $(BINARY) (skipping dependencies)..."
-	@sudo ./$(BINARY) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -skip-deps
+	@sudo ./$(BINARY) -tag $(TAG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -skip-deps
 
 run-only: build
 	@if [ -z "$(COMPONENT)" ]; then \
@@ -69,7 +69,7 @@ run-only: build
 		exit 1; \
 	fi
 	@echo ">> Starting $(BINARY) for $(COMPONENT)..."
-	@sudo ./$(BINARY) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -only $(COMPONENT)
+	@sudo ./$(BINARY) -tag $(TAG) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -only $(COMPONENT)
 
 fmt:
 	@echo ">> Formatting source code..."
@@ -104,6 +104,7 @@ help: banner
 	@echo "  tidy               Tidy the Go module dependencies"
 	@echo ""
 	@echo "Variables:"
+	@echo "  TAG=<tag>          Release tag (e.g. TAG=epoch-1.0.7)"
 	@echo "  OUTDIR=$(OUTDIR)     Output directory"
 	@echo "  WORKDIR=$(WORKDIR)    Working directory"
 	@echo "  JOBS=$(JOBS)            Parallel jobs"
