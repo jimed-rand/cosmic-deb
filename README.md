@@ -61,7 +61,7 @@ All repository metadata — names, upstream URLs, and per-repo epoch tags — is
 }
 ```
 
-Each entry specifies a `tag` to use when downloading the source tarball. Repositories that carry no epoch tags (such as `cosmic-theme-extra`) specify a `branch` instead. The tool first attempts to download a branch HEAD tarball; if that fails (e.g. HTTP 404), it automatically falls back to a shallow `git clone` of the specified branch. If neither `tag` nor `branch` is given, the tool detects the repository's default branch via `git ls-remote` and clones accordingly. All operations use public, unauthenticated HTTPS — no GitHub credentials or tokens are required.
+Each entry specifies a `tag` to use when downloading the source tarball. Repositories that carry no epoch tags specify a `branch` instead. The tool first attempts to download a branch HEAD tarball; if that fails (e.g. HTTP 404), it automatically falls back to a shallow `git clone` of the specified branch. If neither `tag` nor `branch` is given, the tool detects the repository's default branch via `git ls-remote` and clones accordingly. All operations use public, unauthenticated HTTPS — no GitHub credentials or tokens are required.
 
 ### Updating `repos.json` Automatically
 
@@ -292,7 +292,6 @@ The following upstream repositories are included in `repos.json` and processed b
 | `cosmic-settings-daemon` | [pop-os/cosmic-settings-daemon](https://github.com/pop-os/cosmic-settings-daemon) | epoch tag |
 | `cosmic-store` | [pop-os/cosmic-store](https://github.com/pop-os/cosmic-store) | epoch tag |
 | `cosmic-term` | [pop-os/cosmic-term](https://github.com/pop-os/cosmic-term) | epoch tag |
-| `cosmic-theme-extra` | [pop-os/cosmic-theme-extra](https://github.com/pop-os/cosmic-theme-extra) | branch: master (git clone fallback) |
 | `cosmic-wallpapers` | [pop-os/cosmic-wallpapers](https://github.com/pop-os/cosmic-wallpapers) | epoch tag |
 | `cosmic-workspaces-epoch` | [pop-os/cosmic-workspaces-epoch](https://github.com/pop-os/cosmic-workspaces-epoch) | epoch tag |
 | `pop-launcher` | [pop-os/launcher](https://github.com/pop-os/launcher) | epoch tag |
@@ -339,7 +338,8 @@ cosmic-deb/
 - Added `libpulse0` to runtime dependencies listed in generated `.deb` package control files.
 - Added `ensureCargoBinInPath()` which is called at startup, after `rustup` configuration, and after `cargo install just`. This resolves the `exec: "just": executable file not found in $PATH` error seen for `cosmic-store` and `cosmic-term` in container builds where `/root/.cargo/bin` is not initially present in `PATH`.
 - The `run()` helper now explicitly inherits `os.Environ()` so that environment mutations (including PATH updates) propagate to all child processes.
-- Replaced fatal `die()` calls in `downloadSource()` with a graceful fallback to `git clone --depth 1`. If a tarball download returns HTTP 404 or any other error, the tool retries via shallow git clone. This fixes `cosmic-theme-extra` whose branch tarball URL returns 404.
+- Replaced fatal `die()` calls in `downloadSource()` with a graceful fallback to `git clone --depth 1`. If a tarball download returns HTTP 404 or any other error, the tool retries via shallow git clone.
+- Removed `cosmic-theme-extra` from the built-in repo list entirely. The upstream repository `pop-os/cosmic-theme-extra` does not exist on GitHub (confirmed 404). It has been removed from `finder.go`, the components table, and `scripts/uninstall.sh`.
 - Added `defaultBranch()` which uses `git ls-remote --symref` to detect the HEAD branch of a repository when neither a `tag` nor a `branch` is configured. All git operations use public HTTPS with no credentials.
 - Added `gitCloneSource()` as a standalone function for shallow public clones, called both as a primary method and as a download fallback.
 

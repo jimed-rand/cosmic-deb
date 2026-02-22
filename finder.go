@@ -27,7 +27,6 @@ func getFinderRepos() *ReposConfig {
 			{Name: "cosmic-settings-daemon", URL: "https://github.com/pop-os/cosmic-settings-daemon", Tag: "epoch-1.0.7"},
 			{Name: "cosmic-store", URL: "https://github.com/pop-os/cosmic-store", Tag: "epoch-1.0.7"},
 			{Name: "cosmic-term", URL: "https://github.com/pop-os/cosmic-term", Tag: "epoch-1.0.7"},
-			{Name: "cosmic-theme-extra", URL: "https://github.com/pop-os/cosmic-theme-extra", Branch: "master"},
 			{Name: "cosmic-wallpapers", URL: "https://github.com/pop-os/cosmic-wallpapers", Tag: "epoch-1.0.7"},
 			{Name: "cosmic-workspaces-epoch", URL: "https://github.com/pop-os/cosmic-workspaces-epoch", Tag: "epoch-1.0.7"},
 			{Name: "pop-launcher", URL: "https://github.com/pop-os/launcher", Tag: "epoch-1.0.7"},

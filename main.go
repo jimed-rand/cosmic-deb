@@ -88,6 +88,8 @@ type Config struct {
 	skipDeps        bool
 	only            string
 	updateRepos     bool
+	genConfig       bool
+	devFinder       bool
 	maintainerName  string
 	maintainerEmail string
 }
@@ -309,35 +311,40 @@ func updateReposConfig(path string, existing *ReposConfig) *ReposConfig {
 	}
 
 	if path == "built-in" {
-		var sb strings.Builder
-		sb.WriteString("package main\n\nfunc getFinderRepos() *ReposConfig {\n")
-		sb.WriteString("\treturn &ReposConfig{\n")
-		sb.WriteString(fmt.Sprintf("\t\tGeneratedAt: %q,\n", updated.GeneratedAt))
-		sb.WriteString(fmt.Sprintf("\t\tEpochLatest: %q,\n", updated.EpochLatest))
-		sb.WriteString("\t\tRepos: []RepoEntry{\n")
-		for _, r := range updated.Repos {
-			if r.Branch != "" {
-				sb.WriteString(fmt.Sprintf("\t\t\t{Name: %q, URL: %q, Branch: %q},\n", r.Name, r.URL, r.Branch))
-			} else {
-				sb.WriteString(fmt.Sprintf("\t\t\t{Name: %q, URL: %q, Tag: %q},\n", r.Name, r.URL, r.Tag))
-			}
-		}
-		sb.WriteString("\t\t},\n\t}\n}\n")
-		if err := os.WriteFile("finder.go", []byte(sb.String()), 0644); err != nil {
-			die("Failed to write to finder.go: %v", err)
-		}
-		log("Successfully rebuilt finder.go with newest upstream tags.")
-	} else {
-		data, err := json.MarshalIndent(updated, "", "  ")
-		if err != nil {
-			die("Failed to serialise updated repos config: %v", err)
-		}
-		if err := os.WriteFile(path, data, 0644); err != nil {
-			die("Failed to write updated repos config to '%s': %v", path, err)
-		}
-		log("Repos config written to: %s (epoch_latest: %s)", path, updated.EpochLatest)
+		path = "repos.json"
 	}
+
+	data, err := json.MarshalIndent(updated, "", "  ")
+	if err != nil {
+		die("Failed to serialise updated repos config: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		die("Failed to write updated repos config to '%s': %v", path, err)
+	}
+	log("Repos config written to: %s (epoch_latest: %s)", path, updated.EpochLatest)
+
 	return updated
+}
+
+func devUpdateFinder(cfg *ReposConfig) {
+	var sb strings.Builder
+	sb.WriteString("package main\n\nfunc getFinderRepos() *ReposConfig {\n")
+	sb.WriteString("\treturn &ReposConfig{\n")
+	sb.WriteString(fmt.Sprintf("\t\tGeneratedAt: %q,\n", cfg.GeneratedAt))
+	sb.WriteString(fmt.Sprintf("\t\tEpochLatest: %q,\n", cfg.EpochLatest))
+	sb.WriteString("\t\tRepos: []RepoEntry{\n")
+	for _, r := range cfg.Repos {
+		if r.Branch != "" {
+			sb.WriteString(fmt.Sprintf("\t\t\t{Name: %q, URL: %q, Branch: %q},\n", r.Name, r.URL, r.Branch))
+		} else {
+			sb.WriteString(fmt.Sprintf("\t\t\t{Name: %q, URL: %q, Tag: %q},\n", r.Name, r.URL, r.Tag))
+		}
+	}
+	sb.WriteString("\t\t},\n\t}\n}\n")
+	if err := os.WriteFile("finder.go", []byte(sb.String()), 0644); err != nil {
+		die("Failed to write to finder.go: %v", err)
+	}
+	log("Successfully rebuilt finder.go for contributors.")
 }
 
 func effectiveTag(repo RepoEntry, globalTag string) string {
@@ -605,7 +612,9 @@ func main() {
 	useTui := flag.Bool("tui", false, "Launch interactive TUI wizard")
 	flag.StringVar(&cfg.globalTag, "tag", "", "Override tag for all repos (e.g. epoch-1.0.7). When omitted, per-repo tags from repos.json are used.")
 	flag.StringVar(&cfg.reposFile, "repos", defaultReposFile, "Path to repos JSON config file")
-	flag.BoolVar(&cfg.updateRepos, "update-repos", false, "Fetch latest epoch tags from upstream and rewrite the repos config file, then exit")
+	flag.BoolVar(&cfg.updateRepos, "update-repos", false, "Fetch latest epoch tags from upstream and generate repos.json, then exit")
+	flag.BoolVar(&cfg.genConfig, "gen-config", false, "Generate repos.json from the current configuration without fetching updates, then exit")
+	flag.BoolVar(&cfg.devFinder, "dev-finder", false, "Developer: Update finder.go from the loaded repos config, then exit")
 	flag.StringVar(&cfg.workDir, "workdir", "cosmic-work", "Working directory for source checkout and compilation")
 	flag.StringVar(&cfg.outDir, "outdir", outputPkgDir, "Output directory for produced .deb packages")
 	flag.IntVar(&cfg.jobs, "jobs", runtime.NumCPU(), "Number of parallel compilation jobs")
@@ -621,10 +630,33 @@ func main() {
 	log("Detected distribution: %s %s", distroID, codename)
 
 	reposCfg, actualReposFile := loadReposConfig(cfg.reposFile)
+
 	if cfg.updateRepos {
 		updateReposConfig(actualReposFile, reposCfg)
 		os.Exit(0)
 	}
+
+	if cfg.genConfig {
+		path := actualReposFile
+		if path == "built-in" {
+			path = "repos.json"
+		}
+		data, err := json.MarshalIndent(reposCfg, "", "  ")
+		if err != nil {
+			die("Failed to serialise config: %v", err)
+		}
+		if err := os.WriteFile(path, data, 0644); err != nil {
+			die("Failed to write config to '%s': %v", path, err)
+		}
+		log("Config successfully generated at %s", path)
+		os.Exit(0)
+	}
+
+	if cfg.devFinder {
+		devUpdateFinder(reposCfg)
+		os.Exit(0)
+	}
+
 	log("Loaded %d repos from %s (epoch_latest: %s)", len(reposCfg.Repos), actualReposFile, reposCfg.EpochLatest)
 
 	var epochTags []string
