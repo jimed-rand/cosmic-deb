@@ -50,6 +50,7 @@ var buildDeps = []string{
 	"libinput-dev",
 	"libpam0g-dev",
 	"libpixman-1-dev",
+	"libpulse-dev",
 	"libseat-dev",
 	"libssl-dev",
 	"libwayland-dev",
@@ -69,6 +70,7 @@ var runtimeDeps = []string{
 	"libinput10",
 	"libpam0g",
 	"libpixman-1-0",
+	"libpulse0",
 	"libseat1",
 	"libssl3",
 	"libwayland-client0",
@@ -114,6 +116,7 @@ func die(format string, args ...any) {
 func run(dir string, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	cmd.Env = os.Environ()
 	if tuiProg == nil {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -172,21 +175,44 @@ func checkMinVersion(id, codename string) {
 	}
 }
 
+func cargoBinDir() string {
+	cargoHome := os.Getenv("CARGO_HOME")
+	if cargoHome == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = "/root"
+		}
+		cargoHome = filepath.Join(home, ".cargo")
+	}
+	return filepath.Join(cargoHome, "bin")
+}
+
+func ensureCargoBinInPath() {
+	binDir := cargoBinDir()
+	current := os.Getenv("PATH")
+	if !strings.Contains(current, binDir) {
+		os.Setenv("PATH", binDir+":"+current)
+	}
+}
+
 func installBuildDeps() {
 	log("Installing build dependencies via apt-get")
 	args := append([]string{"install", "-y", "--no-install-recommends"}, buildDeps...)
 	if err := run("", "apt-get", args...); err != nil {
 		die("Failed to install build dependencies: %v", err)
 	}
+	ensureCargoBinInPath()
 	log("Configuring Rust stable toolchain via rustup")
 	if err := run("", "rustup", "default", "stable"); err != nil {
 		die("Failed to set rustup default to stable: %v", err)
 	}
+	ensureCargoBinInPath()
 	if _, err := exec.LookPath("just"); err != nil {
 		log("'just' not found; installing via cargo")
 		if err := run("", "cargo", "install", "just"); err != nil {
 			die("Failed to install just via cargo: %v", err)
 		}
+		ensureCargoBinInPath()
 	}
 }
 
@@ -349,6 +375,50 @@ func detectExtractedDir(workDir, tarPath string) (string, error) {
 	return filepath.Join(workDir, topDir), nil
 }
 
+func defaultBranch(repoURL string) string {
+	cloneURL := repoURL
+	if !strings.HasSuffix(cloneURL, ".git") {
+		cloneURL += ".git"
+	}
+	cmd := exec.Command("git", "ls-remote", "--symref", cloneURL, "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "main"
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.HasPrefix(line, "ref: refs/heads/") {
+			parts := strings.Fields(line)
+			if len(parts) >= 1 {
+				return strings.TrimPrefix(parts[0], "ref: refs/heads/")
+			}
+		}
+	}
+	return "main"
+}
+
+func gitCloneSource(workDir string, repo RepoEntry, tag, dest string) string {
+	cloneURL := repo.URL
+	if !strings.HasSuffix(cloneURL, ".git") {
+		cloneURL += ".git"
+	}
+	args := []string{"clone", "--depth", "1"}
+	if tag != "" {
+		args = append(args, "--branch", tag)
+	} else if repo.Branch != "" {
+		args = append(args, "--branch", repo.Branch)
+	} else {
+		branch := defaultBranch(repo.URL)
+		log("Detected default branch for %s: %s", repo.Name, branch)
+		args = append(args, "--branch", branch)
+	}
+	args = append(args, cloneURL, dest)
+	log("Cloning %s from %s", repo.Name, cloneURL)
+	if err := run(workDir, "git", args...); err != nil {
+		die("Failed to git clone %s: %v", repo.Name, err)
+	}
+	return dest
+}
+
 func downloadSource(workDir string, repo RepoEntry, tag string) string {
 	dest := filepath.Join(workDir, repo.Name)
 	if _, err := os.Stat(dest); err == nil {
@@ -359,18 +429,27 @@ func downloadSource(workDir string, repo RepoEntry, tag string) string {
 	tarName := repo.Name + ".tar.gz"
 	tarPath := filepath.Join(workDir, tarName)
 	log("Downloading source archive: %s", repo.Name)
-	if err := run("", "curl", "-fSL", "-o", tarPath, url); err != nil {
-		die("Failed to download source for %s: %v", repo.Name, err)
+	err := run("", "curl", "-fSL", "-o", tarPath, url)
+	if err != nil {
+		_ = os.Remove(tarPath)
+		log("Tarball download failed for %s, falling back to git clone", repo.Name)
+		return gitCloneSource(workDir, repo, tag, dest)
 	}
 	extractedDir, err := detectExtractedDir(workDir, tarPath)
 	if err != nil {
-		die("Failed to detect extracted directory for %s: %v", repo.Name, err)
+		_ = os.Remove(tarPath)
+		log("Failed to inspect archive for %s: %v, falling back to git clone", repo.Name, err)
+		return gitCloneSource(workDir, repo, tag, dest)
 	}
 	if err := run(workDir, "tar", "-xzf", tarName); err != nil {
-		die("Failed to extract source for %s: %v", repo.Name, err)
+		_ = os.Remove(tarPath)
+		log("Failed to extract source for %s: %v, falling back to git clone", repo.Name, err)
+		return gitCloneSource(workDir, repo, tag, dest)
 	}
 	if _, err := os.Stat(extractedDir); err != nil {
-		die("Expected extracted directory not found for %s: %s", repo.Name, extractedDir)
+		_ = os.Remove(tarPath)
+		log("Expected extracted directory not found for %s, falling back to git clone", repo.Name)
+		return gitCloneSource(workDir, repo, tag, dest)
 	}
 	if err := os.Rename(extractedDir, dest); err != nil {
 		die("Failed to rename extracted directory for %s: %v", repo.Name, err)
@@ -534,6 +613,8 @@ func main() {
 	flag.StringVar(&cfg.only, "only", "", "Restrict the build to a single named cosmic-* component")
 	flag.Parse()
 
+	ensureCargoBinInPath()
+
 	checkAptBased()
 	distroID, codename := detectDistro()
 	checkMinVersion(distroID, codename)
@@ -621,6 +702,8 @@ func main() {
 	buildFunc := func() {
 		if !cfg.skipDeps {
 			installBuildDeps()
+		} else {
+			ensureCargoBinInPath()
 		}
 		if err := os.MkdirAll(cfg.workDir, 0755); err != nil {
 			die("Failed to create working directory: %v", err)
