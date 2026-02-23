@@ -22,6 +22,7 @@ const (
 	outputPkgDir     = "cosmic-packages"
 	metaPkgName      = "cosmic-desktop"
 	defaultReposFile = "built-in"
+	rustLinkerFlags  = "-C link-arg=-fuse-ld=lld"
 )
 
 type RepoEntry struct {
@@ -119,6 +120,17 @@ func run(dir string, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
 	cmd.Env = os.Environ()
+	if tuiProg == nil {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+	return cmd.Run()
+}
+
+func runEnv(dir string, extraEnv []string, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), extraEnv...)
 	if tuiProg == nil {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -490,27 +502,56 @@ func getVersion(repoDir, fallbackTag string) string {
 	return "0.1.0"
 }
 
+func buildEnv() []string {
+	existing := os.Getenv("RUSTFLAGS")
+	var rfVal string
+	if existing != "" {
+		rfVal = existing + " " + rustLinkerFlags
+	} else {
+		rfVal = rustLinkerFlags
+	}
+	return []string{"RUSTFLAGS=" + rfVal}
+}
+
 func buildRepo(repoDir, repoName string, jobs int) error {
 	log("Building component: %s", repoName)
-	if _, err := os.Stat(filepath.Join(repoDir, "justfile")); err == nil {
-		return run(repoDir, "just", "build")
+	env := buildEnv()
+
+	justfile := filepath.Join(repoDir, "justfile")
+	makefile := filepath.Join(repoDir, "Makefile")
+	cargotoml := filepath.Join(repoDir, "Cargo.toml")
+
+	if _, err := os.Stat(justfile); err == nil {
+		return runEnv(repoDir, env, "just", "build-release", "--frozen")
 	}
-	if _, err := os.Stat(filepath.Join(repoDir, "Makefile")); err == nil {
-		return run(repoDir, "make", fmt.Sprintf("-j%d", jobs))
+	if _, err := os.Stat(makefile); err == nil {
+		return runEnv(repoDir, env, "make",
+			fmt.Sprintf("-j%d", jobs),
+			"ARGS=--frozen --release",
+		)
 	}
-	if _, err := os.Stat(filepath.Join(repoDir, "Cargo.toml")); err == nil {
-		return run(repoDir, "cargo", "build", "--release",
-			fmt.Sprintf("--jobs=%d", jobs))
+	if _, err := os.Stat(cargotoml); err == nil {
+		return runEnv(repoDir, env, "cargo", "build", "--release", "--frozen",
+			fmt.Sprintf("--jobs=%d", jobs),
+		)
 	}
 	return fmt.Errorf("no recognised build system found in %s", repoDir)
 }
 
 func installToStage(repoDir, stageDir string) error {
-	if _, err := os.Stat(filepath.Join(repoDir, "justfile")); err == nil {
+	justfile := filepath.Join(repoDir, "justfile")
+	makefile := filepath.Join(repoDir, "Makefile")
+
+	if _, err := os.Stat(justfile); err == nil {
 		return run(repoDir, "just", "rootdir="+stageDir, "install")
 	}
-	if _, err := os.Stat(filepath.Join(repoDir, "Makefile")); err == nil {
-		return run(repoDir, "make", "DESTDIR="+stageDir, "install")
+	if _, err := os.Stat(makefile); err == nil {
+		return run(repoDir, "make",
+			"prefix=/usr",
+			"libexecdir=/usr/lib",
+			"DESTDIR="+stageDir,
+			"install",
+		)
 	}
 	return fmt.Errorf("no install target found for component %s", repoDir)
 }
