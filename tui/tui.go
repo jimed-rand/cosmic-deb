@@ -226,7 +226,7 @@ func (m Model) getStepInfo() (string, string) {
 	case StepMaintainerEmail:
 		return "[ Maintainer Email ]", "Enter your email for package metadata"
 	case StepRelease:
-		return "[ Release Tag ]", "Select the COSMIC Epoch release to build"
+		return "[ Source Mode ]", "Select an epoch tag or build from the main branch HEAD"
 	case StepWorkDir:
 		return "[ Workspace ]", "Directory for compilation and source code"
 	case StepOutDir:
@@ -246,9 +246,11 @@ func (m Model) getStepInfo() (string, string) {
 func (m Model) getMenuOptions() []MenuOption {
 	switch m.Step {
 	case StepRelease:
-		var opts []MenuOption
+		opts := []MenuOption{
+			{Key: "branch", Text: "Latest (main branch)", Desc: "HEAD of each repo's main branch — newest code"},
+		}
 		for _, r := range m.Releases {
-			opts = append(opts, MenuOption{Key: r, Text: r})
+			opts = append(opts, MenuOption{Key: r, Text: r, Desc: "epoch tag"})
 		}
 		return opts
 	case StepJobs:
@@ -364,9 +366,13 @@ func (m *Model) commitInput() {
 func (m Model) buildSummary() string {
 	var lines []string
 	if v, ok := m.Choices["release"]; ok {
-		lines = append(lines, fmt.Sprintf("Tag:  %s", v))
+		if v == "branch" {
+			lines = append(lines, "Src:  main branch HEAD")
+		} else {
+			lines = append(lines, fmt.Sprintf("Tag:  %s", v))
+		}
 	} else {
-		lines = append(lines, "Tag:  Latest Release")
+		lines = append(lines, "Src:  (pending selection)")
 	}
 	if m.Distro != "" {
 		lines = append(lines, fmt.Sprintf("OS:   %s %s", m.Distro, m.Codename))

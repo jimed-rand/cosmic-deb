@@ -14,7 +14,7 @@ SCRIPTDIR  := $(DESTDIR)$(PREFIX)/share/cosmic-deb/scripts
 
 TAG_ARG    := $(if $(TAG),-tag $(TAG),)
 
-.PHONY: all build clean install uninstall run run-tui run-skip-deps run-only update-repos fmt vet tidy help banner
+.PHONY: all build clean install uninstall run run-tui run-skip-deps run-only run-branch update-repos fmt vet tidy help banner
 
 all: build
 
@@ -63,6 +63,10 @@ run-tui: build
 	@echo ">> Launching TUI interface..."
 	@sudo ./$(BINARY) $(TAG_ARG) -repos $(REPOS) -tui
 
+run-branch: build
+	@echo ">> Starting $(BINARY) with main branch HEAD..."
+	@sudo ./$(BINARY) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -use-branch
+
 run-skip-deps: build
 	@echo ">> Running without dependency installation..."
 	@sudo ./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -skip-deps
@@ -98,8 +102,9 @@ help: banner
 	@echo ""
 	@echo "Targets:"
 	@echo "  build              Compile the orchestrator"
-	@echo "  run                Execute the full build pipeline"
-	@echo "  run-tui            Start with interactive configuration"
+	@echo "  run                Execute the full build pipeline (interactive source selection)"
+	@echo "  run-tui            Start with interactive TUI configuration"
+	@echo "  run-branch         Execute pipeline using main branch HEAD for all repos"
 	@echo "  run-only           Build specific component (COMPONENT=name)"
 	@echo "  update-repos       Fetch latest release tags from upstream"
 	@echo "  install            Deploy binary to system paths"

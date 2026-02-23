@@ -295,6 +295,7 @@ type Config struct {
 	updateRepos     bool
 	genConfig       bool
 	devFinder       bool
+	useBranch       bool
 	maintainerName  string
 	maintainerEmail string
 }
@@ -606,7 +607,7 @@ func archiveURL(repo RepoEntry, tag string) string {
 	}
 	branch := repo.Branch
 	if branch == "" {
-		branch = "master"
+		branch = "main"
 	}
 	return fmt.Sprintf("%s/archive/refs/heads/%s.tar.gz", repo.URL, branch)
 }
@@ -965,14 +966,25 @@ Description: COSMIC Desktop Environment meta package
 	return run("", "dpkg-deb", "--build", stageDir, pkgFile)
 }
 
+func resolveTag(cfg *Config, repo RepoEntry) string {
+	if cfg.useBranch {
+		return ""
+	}
+	return effectiveTag(repo, cfg.globalTag)
+}
+
 func processRepo(cfg *Config, repo RepoEntry) bool {
-	tag := effectiveTag(repo, cfg.globalTag)
-	log("Processing component: %s (tag: %s)", repo.Name, func() string {
-		if tag == "" {
-			return "branch:" + repo.Branch
-		}
-		return tag
-	}())
+	tag := resolveTag(cfg, repo)
+	sourceLabel := tag
+	if sourceLabel == "" {
+		sourceLabel = "branch:" + func() string {
+			if repo.Branch != "" {
+				return repo.Branch
+			}
+			return "main"
+		}()
+	}
+	log("Processing component: %s (%s)", repo.Name, sourceLabel)
 	repoDir := downloadSource(cfg.workDir, repo, tag)
 	version := getVersion(repoDir, tag)
 
@@ -1020,6 +1032,7 @@ func main() {
 	flag.IntVar(&cfg.jobs, "jobs", runtime.NumCPU(), "Parallel jobs")
 	flag.BoolVar(&cfg.skipDeps, "skip-deps", false, "Skip dependency installation")
 	flag.StringVar(&cfg.only, "only", "", "Restrict build to a single component")
+	flag.BoolVar(&cfg.useBranch, "use-branch", false, "Build from main branch HEAD instead of epoch tags")
 	flag.Parse()
 
 	ensureCargoBinInPath()
@@ -1077,7 +1090,10 @@ func main() {
 		}
 		cfg.maintainerName = choices["maintainer_name"]
 		cfg.maintainerEmail = choices["maintainer_email"]
-		if cfg.globalTag == "" {
+		if choices["release"] == "branch" {
+			cfg.useBranch = true
+			cfg.globalTag = ""
+		} else if cfg.globalTag == "" {
 			cfg.globalTag = choices["release"]
 		}
 		cfg.workDir = choices["workdir"]
@@ -1102,20 +1118,25 @@ func main() {
 			cfg.maintainerEmail = "cosmic-deb@example.com"
 		}
 
-		if cfg.globalTag == "" && len(epochTags) > 1 {
-			fmt.Println("Available epoch tags (from repos.json):")
-			limit := len(epochTags)
-			if limit > 10 {
-				limit = 10
+		if !cfg.useBranch && cfg.globalTag == "" {
+			fmt.Println("Select source mode:")
+			fmt.Printf("  [b] Latest (main branch HEAD)\n")
+			if len(epochTags) > 0 {
+				limit := len(epochTags)
+				if limit > 10 {
+					limit = 10
+				}
+				for i := 0; i < limit; i++ {
+					fmt.Printf("  [%d] %s\n", i, epochTags[i])
+				}
 			}
-			for i := 0; i < limit; i++ {
-				fmt.Printf("  [%d] %s\n", i, epochTags[i])
-			}
-			fmt.Printf("  [*] Use per-repo tags from repos.json\n")
-			fmt.Print("Select tag index (or press Enter to use per-repo tags): ")
+			fmt.Printf("  [*] Use per-repo tags from repos config\n")
+			fmt.Print("Select option (b / index / Enter for per-repo tags): ")
 			idxStr, _ := reader.ReadString('\n')
 			idxStr = strings.TrimSpace(idxStr)
-			if idxStr != "" {
+			if idxStr == "b" {
+				cfg.useBranch = true
+			} else if idxStr != "" {
 				idx, err := strconv.Atoi(idxStr)
 				if err == nil && idx >= 0 && idx < len(epochTags) {
 					cfg.globalTag = epochTags[idx]
@@ -1124,7 +1145,9 @@ func main() {
 		}
 	}
 
-	if cfg.globalTag != "" {
+	if cfg.useBranch {
+		log("Source mode: main branch HEAD (latest, untagged)")
+	} else if cfg.globalTag != "" {
 		log("Global tag override: %s (applied to all repos)", cfg.globalTag)
 	} else {
 		log("Using per-repo tags from: %s", actualReposFile)
@@ -1176,6 +1199,9 @@ func main() {
 			}
 			metaVersion = strings.TrimPrefix(metaVersion, "epoch-")
 			metaVersion = strings.TrimPrefix(metaVersion, "v")
+			if cfg.useBranch {
+				metaVersion = "0.0.0+main"
+			}
 			if err := buildMetaPackage(cfg, cfg.outDir, metaVersion, builtRepos); err != nil {
 				log("Warning: Meta package build failed: %v", err)
 			}

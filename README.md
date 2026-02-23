@@ -29,6 +29,20 @@ Prior to the execution of the build process, the host system must be equipped wi
 make build
 ```
 
+## Source Mode Selection
+
+`cosmic-deb` supports two distinct source acquisition strategies, selectable at runtime via both the interactive CLI prompt and the TUI wizard:
+
+**Epoch Tag** — Checks out a specific, versioned release tag (e.g., `epoch-1.0.7`) from each repository. This is the stable, reproducible option and is appropriate for production packaging or when a known-good baseline is required.
+
+**Main Branch HEAD** — Clones or downloads the current HEAD of each repository's default branch (`main`). This mode targets the latest unreleased code and is the appropriate choice when the epoch tags lag behind the actual upstream development state, which is common for hepp3n's Codeberg forks where active work occurs on the main branch ahead of formal tagging.
+
+The source mode can also be forced non-interactively via the `-use-branch` flag:
+
+```bash
+sudo ./cosmic-deb -use-branch
+```
+
 ## Configuration and Metadata Integration
 
 A distinguishing feature of this utility is the encapsulation of repository metadata directly within the binary via `finder.go`. This design decision minimises external file dependencies, thereby enhancing the portability and integrity of the build process. The metadata points exclusively to verified Codeberg forks maintained by hepp3n, which contain the essential `debian/` directory structures (including `control`, `rules`, and `changelog` files) required for native Debianisation.
@@ -59,6 +73,16 @@ As the build process involves the installation of systemic dependencies and the 
 sudo ./cosmic-deb
 ```
 
+Upon launch, the interactive prompt will ask you to select a source mode. Enter `b` to build from the main branch HEAD, or select a numbered epoch tag from the list:
+
+```
+Select source mode:
+  [b] Latest (main branch HEAD)
+  [0] epoch-1.0.7
+  [*] Use per-repo tags from repos config
+Select option (b / index / Enter for per-repo tags):
+```
+
 ### Advanced Execution Parameters
 
 The behaviour of `cosmic-deb` can be modified through several command-line flags, allowing for granular control over the build environment.
@@ -68,6 +92,7 @@ The behaviour of `cosmic-deb` can be modified through several command-line flags
 | `-repos` | `built-in` | Specifies an alternative path for repository configuration. |
 | `-update-repos` | `false` | Triggers a metadata update of epoch tags followed by immediate termination. |
 | `-tag` | *(null)* | Enforces a specific version tag across all managed repositories. |
+| `-use-branch` | `false` | Build from main branch HEAD instead of epoch tags. |
 | `-workdir` | `cosmic-work` | Designates the directory for source retrieval and compilation. |
 | `-outdir` | `cosmic-packages` | Output location for the resulting `.deb` binary packages. |
 | `-jobs` | *CPU Count* | Determines the level of parallelism during the compilation phase. |
