@@ -85,6 +85,26 @@ var globalBuildDeps = []string{
 	"nasm",
 	"pkg-config",
 	"rustc",
+	"fakeroot",
+	"dh-cargo",
+	"ninja-build",
+	"meson",
+	"sassc",
+	"quilt",
+	"libfile-fcntllock-perl",
+	"dh-make",
+	"dpkg-dev",
+	"libglib2.0-dev-bin",
+	"libwayland-bin",
+	"libxml2-utils",
+	"libglib2.0-bin",
+	"gettext",
+	"itstool",
+	"wayland-protocols",
+	"libgdk-pixbuf2.0-dev",
+	"dh-exec",
+	"just",
+	"rust-all",
 }
 
 var perComponentBuildDeps = map[string][]string{
@@ -895,6 +915,22 @@ func runtimeDepsForComponent(name string) []string {
 }
 
 func buildDebianPackage(cfg *Config, stageDir, outDir, pkgName, version string) error {
+	// Sanity check: Ensure staging directory actually contains files (post-compile artifacts)
+	files, err := os.ReadDir(stageDir)
+	if err != nil {
+		return err
+	}
+	hasContent := false
+	for _, f := range files {
+		if f.Name() != "DEBIAN" {
+			hasContent = true
+			break
+		}
+	}
+	if !hasContent {
+		return fmt.Errorf("staging directory for %s is empty; compilation or installation might have failed to produce artifacts", pkgName)
+	}
+
 	debianDir := filepath.Join(stageDir, "DEBIAN")
 	if err := os.MkdirAll(debianDir, 0755); err != nil {
 		return err
@@ -960,7 +996,7 @@ Description: COSMIC Desktop Environment component — %s
 		return err
 	}
 	pkgFile := filepath.Join(outDir, fmt.Sprintf("%s_%s_%s.deb", pkgName, version, arch))
-	return run("", "dpkg-deb", "--build", stageDir, pkgFile)
+	return run("", "fakeroot", "dpkg-deb", "--build", stageDir, pkgFile)
 }
 
 func buildMetaPackage(cfg *Config, outDir, version string, builtRepos []string) error {
@@ -993,7 +1029,7 @@ Description: COSMIC Desktop Environment meta package
 	}
 	pkgFile := filepath.Join(outDir, fmt.Sprintf("%s_%s_%s.deb", metaPkgName, version, arch))
 	log("Building meta package: %s", metaPkgName)
-	return run("", "dpkg-deb", "--build", stageDir, pkgFile)
+	return run("", "fakeroot", "dpkg-deb", "--build", stageDir, pkgFile)
 }
 
 func resolveTag(cfg *Config, repo RepoEntry) string {
