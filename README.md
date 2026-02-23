@@ -1,6 +1,6 @@
 # cosmic-deb
 
-COSMIC Debian Builder or `cosmic-deb`, is a builder tool for creating Debian/Ubuntu packages for COSMIC desktop. 
+COSMIC Debian Builder or `cosmic-deb`, is a builder tool for creating Debian/Ubuntu packages for COSMIC desktop.
 
 ## Abstract
 
@@ -20,6 +20,21 @@ The efficacy of this framework is contingent upon its deployment within an APT-b
 | **Ubuntu Linux** | Current LTS releases (e.g., 22.04 Jammy, 24.04 Noble) and development branches (e.g., Plucky Puffin). |
 
 *Note: Non-LTS intermediate releases are deprecated in favour of more robust development cycles and stable long-term support foundations.*
+
+## Distro-Aware Dependency Resolution
+
+Build dependencies are resolved dynamically at runtime based on the detected distribution and release codename. This ensures that packages installed are appropriate for the host system and avoids conflicts caused by package naming differences or availability gaps across releases.
+
+The following table summarises per-release dependency behaviour:
+
+| Package | Debian Bookworm | Debian Trixie/Sid | Ubuntu Jammy | Ubuntu Noble/Plucky |
+|:---|:---:|:---:|:---:|:---:|
+| `libdisplay-info-dev` | No | Yes | No | Yes |
+| `rust-all` | Yes | Yes | No | Yes |
+| `dh-cargo` | Yes | Yes | No | Yes |
+| `just` (via apt) | No | Yes | No | No |
+
+When `just` is not available through APT (Debian Bookworm, all Ubuntu releases), `cosmic-deb` automatically installs it via `cargo install just` after the toolchain setup phase. Similarly, when `rust-all` is absent (Ubuntu Jammy), the individual `rustc` and `cargo` packages are used in conjunction with a `rustup`-managed stable toolchain. The `libdisplay-info-dev` package is conditionally added to the build dependency set for both global and per-component (`cosmic-comp`, `cosmic-settings`) resolution only on releases where it is available in the official repositories.
 
 ## Methodological Compilation
 
@@ -143,7 +158,7 @@ The framework maintains a comprehensive mapping of both build-time and runtime r
 
 ## Procedural Sophistication
 
-The orchestration logic prioritises high-performance retrieval via source archives, with a secondary fallback to shallow Git cloning mechanisms. Build system identification is automated, recognising `Justfiles`, `Makefiles`, and `Cargo.toml` configurations to apply appropriate release-grade optimisations. 
+The orchestration logic prioritises high-performance retrieval via source archives, with a secondary fallback to shallow Git cloning mechanisms. Build system identification is automated, recognising `Justfiles`, `Makefiles`, and `Cargo.toml` configurations to apply appropriate release-grade optimisations.
 
 The build environment is further enhanced by the integration of the `mold` linker and `nasm` assembler where applicable, significantly reducing compilation latency. Rust stability is ensured through automated `rustup` configurations, maintaining a consistent toolchain version across the entirety of the COSMIC™ suite.
 
@@ -157,7 +172,7 @@ It is imperative to note that the upstream COSMIC™ components and the associat
 
 ### Intellectual Property Statement
 
-This project represents an independent academic and technical endeavour aimed at broadening the accessibility of the COSMIC™ Desktop Environment. 
+This project represents an independent academic and technical endeavour aimed at broadening the accessibility of the COSMIC™ Desktop Environment.
 
 *   **Honouring Original Authorship**: We hold the innovative work of the **System76 / Pop!_OS team** in the highest esteem. Their pioneering efforts in developing a modern, memory-safe desktop environment are the fundamental motivation for this project.
 *   **Acknowledgement of Fork Maintainers**: We express our profound gratitude to **hepp3n (Piotr)** for his meticulous maintenance of the Debian packaging forks. His contributions are the cornerstone upon which this automated orchestrator is built.

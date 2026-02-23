@@ -38,193 +38,6 @@ type ReposConfig struct {
 	Repos       []RepoEntry `json:"repos"`
 }
 
-var globalBuildDeps = []string{
-	"build-essential",
-	"cargo",
-	"clang",
-	"cmake",
-	"curl",
-	"debhelper",
-	"desktop-file-utils",
-	"devscripts",
-	"git",
-	"imagemagick",
-	"intltool",
-	"iso-codes",
-	"libclang-dev",
-	"libdbus-1-dev",
-	"libdisplay-info-dev",
-	"libegl-dev",
-	"libegl1-mesa-dev",
-	"libexpat1-dev",
-	"libflatpak-dev",
-	"libfontconfig-dev",
-	"libfreetype-dev",
-	"libgbm-dev",
-	"libglib2.0-dev",
-	"libgstreamer-plugins-base1.0-dev",
-	"libgstreamer1.0-dev",
-	"libinput-dev",
-	"libnm-dev",
-	"libpam-dev",
-	"libpipewire-0.3-dev",
-	"libpixman-1-dev",
-	"libpulse-dev",
-	"libseat-dev",
-	"libssl-dev",
-	"libsystemd-dev",
-	"libudev-dev",
-	"libwayland-dev",
-	"libxcb-render0-dev",
-	"libxcb-shape0-dev",
-	"libxcb-xfixes0-dev",
-	"libxcb1-dev",
-	"libxkbcommon-dev",
-	"lld",
-	"mold",
-	"nasm",
-	"pkg-config",
-	"rustc",
-	"fakeroot",
-	"dh-cargo",
-	"ninja-build",
-	"meson",
-	"sassc",
-	"quilt",
-	"libfile-fcntllock-perl",
-	"dh-make",
-	"dpkg-dev",
-	"libglib2.0-dev-bin",
-	"libwayland-bin",
-	"libxml2-utils",
-	"libglib2.0-bin",
-	"gettext",
-	"itstool",
-	"wayland-protocols",
-	"libgdk-pixbuf2.0-dev",
-	"dh-exec",
-	"just",
-	"rust-all",
-}
-
-var perComponentBuildDeps = map[string][]string{
-	"cosmic-comp": {
-		"cargo", "cmake", "debhelper", "libegl1-mesa-dev",
-		"libfontconfig-dev", "libgbm-dev", "libinput-dev",
-		"libpixman-1-dev", "libseat-dev", "libsystemd-dev",
-		"libudev-dev", "libwayland-dev", "libxcb1-dev",
-		"libxkbcommon-dev", "libdisplay-info-dev", "rustc",
-	},
-	"cosmic-session": {
-		"debhelper", "cargo", "just",
-	},
-	"cosmic-files": {
-		"debhelper", "git", "just", "libclang-dev",
-		"libglib2.0-dev", "libxkbcommon-dev", "pkg-config",
-	},
-	"cosmic-applets": {
-		"debhelper", "rustc", "cargo", "libclang-dev",
-		"libdbus-1-dev", "libegl-dev", "libpulse-dev",
-		"libpipewire-0.3-dev", "libudev-dev", "libxkbcommon-dev",
-		"libwayland-dev", "libinput-dev", "just", "pkg-config",
-	},
-	"cosmic-edit": {
-		"debhelper", "git", "just", "pkg-config",
-		"libglib2.0-dev", "libxkbcommon-dev",
-	},
-	"cosmic-store": {
-		"debhelper", "git", "just", "libflatpak-dev",
-		"libssl-dev", "libxkbcommon-dev", "pkg-config",
-	},
-	"cosmic-bg": {
-		"debhelper", "just", "libwayland-dev",
-		"libxkbcommon-dev", "mold", "nasm", "pkg-config",
-	},
-	"cosmic-greeter": {
-		"debhelper", "git", "just", "libclang-dev",
-		"libinput-dev", "libpam-dev", "libwayland-dev",
-		"libxkbcommon-dev", "pkg-config",
-	},
-	"cosmic-settings": {
-		"debhelper", "cmake", "just", "libclang-dev",
-		"libexpat1-dev", "libfontconfig-dev", "libfreetype-dev",
-		"libinput-dev", "libpipewire-0.3-dev", "libudev-dev",
-		"libwayland-dev", "libxkbcommon-dev", "mold", "pkg-config",
-	},
-	"cosmic-settings-daemon": {
-		"debhelper", "cargo", "libudev-dev", "libinput-dev",
-		"libssl-dev", "libxkbcommon-dev", "pulseaudio-utils",
-		"pkg-config",
-	},
-	"xdg-desktop-portal-cosmic": {
-		"debhelper", "cargo", "libclang-dev", "libglib2.0-dev",
-		"libegl-dev", "libgbm-dev", "libpipewire-0.3-dev",
-		"libwayland-dev", "libxkbcommon-dev", "pkg-config",
-	},
-	"cosmic-app-library": {
-		"debhelper", "just", "pkg-config",
-		"libxkbcommon-dev", "libwayland-dev",
-	},
-	"cosmic-icons": {
-		"debhelper", "just",
-	},
-	"cosmic-panel": {
-		"debhelper", "just", "cargo", "libwayland-dev",
-		"libxkbcommon-dev", "pkg-config", "desktop-file-utils",
-	},
-	"cosmic-notifications": {
-		"debhelper", "rustc", "cargo", "just", "intltool",
-		"libxkbcommon-dev", "libwayland-dev", "pkg-config",
-	},
-	"cosmic-osd": {
-		"debhelper", "cargo", "just", "libclang-dev",
-		"libinput-dev", "libpulse-dev", "libudev-dev",
-		"libpipewire-0.3-dev", "libxkbcommon-dev",
-		"libwayland-dev", "pkg-config",
-	},
-	"cosmic-launcher": {
-		"debhelper", "rustc", "cargo", "just", "intltool",
-		"libxkbcommon-dev", "libwayland-dev", "pkg-config",
-	},
-	"cosmic-screenshot": {
-		"debhelper", "just",
-	},
-	"cosmic-idle": {
-		"debhelper", "cargo", "just", "libxkbcommon-dev",
-		"libwayland-dev", "pkg-config",
-	},
-	"cosmic-randr": {
-		"cargo", "debhelper", "just", "libwayland-dev",
-		"pkg-config", "rustc",
-	},
-	"cosmic-wallpapers": {
-		"debhelper", "imagemagick",
-	},
-	"cosmic-workspaces": {
-		"debhelper", "cargo", "libegl1-mesa-dev", "libgbm-dev",
-		"libinput-dev", "libudev-dev", "libxkbcommon-dev",
-		"libwayland-dev", "pkg-config",
-	},
-	"cosmic-initial-setup": {
-		"debhelper", "git", "just", "libflatpak-dev",
-		"libinput-dev", "libssl-dev", "libudev-dev",
-		"libxkbcommon-dev", "pkg-config",
-	},
-	"pop-launcher": {
-		"cargo", "debhelper", "just", "pkg-config",
-		"rustc", "libxkbcommon-dev", "libegl-dev",
-	},
-	"cosmic-term": {
-		"debhelper", "git", "just", "pkg-config",
-		"libxkbcommon-dev",
-	},
-	"cosmic-player": {
-		"clang", "debhelper", "just",
-		"libgstreamer1.0-dev", "libgstreamer-plugins-base1.0-dev",
-		"libxkbcommon-dev", "pkg-config",
-	},
-}
-
 var perComponentRuntimeDeps = map[string][]string{
 	"cosmic-comp": {
 		"libegl1", "libwayland-server0",
@@ -318,6 +131,8 @@ type Config struct {
 	useBranch       bool
 	maintainerName  string
 	maintainerEmail string
+	distroID        string
+	codename        string
 }
 
 var tuiProg *tea.Program
@@ -434,16 +249,16 @@ func ensureCargoBinInPath() {
 	}
 }
 
-func collectAllBuildDeps() []string {
+func collectAllBuildDeps(distroID, codename string) []string {
 	seen := make(map[string]bool)
 	var result []string
-	for _, dep := range globalBuildDeps {
+	for _, dep := range resolveGlobalBuildDeps(distroID, codename) {
 		if !seen[dep] {
 			seen[dep] = true
 			result = append(result, dep)
 		}
 	}
-	for _, deps := range perComponentBuildDeps {
+	for _, deps := range resolvePerComponentBuildDeps(distroID, codename) {
 		for _, dep := range deps {
 			if !seen[dep] {
 				seen[dep] = true
@@ -454,9 +269,9 @@ func collectAllBuildDeps() []string {
 	return result
 }
 
-func installBuildDeps() {
-	log("Installing build dependencies (may require sudo password)")
-	allDeps := collectAllBuildDeps()
+func installBuildDeps(cfg *Config) {
+	log("Installing build dependencies for %s %s (may require sudo password)", cfg.distroID, cfg.codename)
+	allDeps := collectAllBuildDeps(cfg.distroID, cfg.codename)
 	args := append([]string{"install", "-y", "--no-install-recommends"}, allDeps...)
 	executable := "apt-get"
 	execArgs := args
@@ -480,7 +295,7 @@ func installBuildDeps() {
 	}
 	ensureCargoBinInPath()
 	if _, err := exec.LookPath("just"); err != nil {
-		log("'just' not found; installing via cargo")
+		log("'just' not found in PATH; installing via cargo")
 		if err := run("", "cargo", "install", "just"); err != nil {
 			die("Failed to install just via cargo: %v", err)
 		}
@@ -915,7 +730,6 @@ func runtimeDepsForComponent(name string) []string {
 }
 
 func buildDebianPackage(cfg *Config, stageDir, outDir, pkgName, version string) error {
-	// Sanity check: Ensure staging directory actually contains files (post-compile artifacts)
 	files, err := os.ReadDir(stageDir)
 	if err != nil {
 		return err
@@ -1103,9 +917,9 @@ func main() {
 
 	ensureCargoBinInPath()
 	checkAptBased()
-	distroID, codename := detectDistro()
-	checkMinVersion(distroID, codename)
-	log("Detected distribution: %s %s", distroID, codename)
+	cfg.distroID, cfg.codename = detectDistro()
+	checkMinVersion(cfg.distroID, cfg.codename)
+	log("Detected distribution: %s %s", cfg.distroID, cfg.codename)
 
 	reposCfg, actualReposFile := loadReposConfig(cfg.reposFile)
 
@@ -1147,7 +961,7 @@ func main() {
 	}
 
 	if *useTui {
-		choices, confirmed, err := tui.RunWizard(distroID, codename, epochTags)
+		choices, confirmed, err := tui.RunWizard(cfg.distroID, cfg.codename, epochTags)
 		if err != nil {
 			die("TUI failure: %v", err)
 		}
@@ -1220,7 +1034,7 @@ func main() {
 	}
 
 	if !cfg.skipDeps {
-		installBuildDeps()
+		installBuildDeps(cfg)
 	} else {
 		ensureCargoBinInPath()
 	}
