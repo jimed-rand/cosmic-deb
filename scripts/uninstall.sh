@@ -2,15 +2,17 @@
 set -e
 
 COSMIC_PACKAGES=(
+    cosmic-app-library
     cosmic-applets
-    cosmic-applibrary
     cosmic-bg
     cosmic-comp
+    cosmic-desktop
     cosmic-edit
     cosmic-files
     cosmic-greeter
     cosmic-icons
     cosmic-idle
+    cosmic-initial-setup
     cosmic-launcher
     cosmic-notifications
     cosmic-osd
@@ -23,9 +25,9 @@ COSMIC_PACKAGES=(
     cosmic-settings-daemon
     cosmic-store
     cosmic-term
-    cosmic-theme-extra
     cosmic-wallpapers
-    cosmic-workspaces-epoch
+    cosmic-workspaces
+    pop-launcher
     xdg-desktop-portal-cosmic
 )
 

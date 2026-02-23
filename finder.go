@@ -2,11 +2,11 @@ package main
 
 func getFinderRepos() *ReposConfig {
 	return &ReposConfig{
-		GeneratedAt: "2026-02-22",
+		GeneratedAt: "2026-02-23",
 		EpochLatest: "epoch-1.0.7",
 		Repos: []RepoEntry{
+			{Name: "cosmic-app-library", URL: "https://github.com/pop-os/cosmic-app-library", Tag: "epoch-1.0.7"},
 			{Name: "cosmic-applets", URL: "https://github.com/pop-os/cosmic-applets", Tag: "epoch-1.0.7"},
-			{Name: "cosmic-applibrary", URL: "https://github.com/pop-os/cosmic-applibrary", Tag: "epoch-1.0.7"},
 			{Name: "cosmic-bg", URL: "https://github.com/pop-os/cosmic-bg", Tag: "epoch-1.0.7"},
 			{Name: "cosmic-comp", URL: "https://github.com/pop-os/cosmic-comp", Tag: "epoch-1.0.7"},
 			{Name: "cosmic-edit", URL: "https://github.com/pop-os/cosmic-edit", Tag: "epoch-1.0.7"},
@@ -28,7 +28,7 @@ func getFinderRepos() *ReposConfig {
 			{Name: "cosmic-store", URL: "https://github.com/pop-os/cosmic-store", Tag: "epoch-1.0.7"},
 			{Name: "cosmic-term", URL: "https://github.com/pop-os/cosmic-term", Tag: "epoch-1.0.7"},
 			{Name: "cosmic-wallpapers", URL: "https://github.com/pop-os/cosmic-wallpapers", Tag: "epoch-1.0.7"},
-			{Name: "cosmic-workspaces-epoch", URL: "https://github.com/pop-os/cosmic-workspaces-epoch", Tag: "epoch-1.0.7"},
+			{Name: "cosmic-workspaces", URL: "https://github.com/pop-os/cosmic-workspaces-epoch", Tag: "epoch-1.0.7"},
 			{Name: "pop-launcher", URL: "https://github.com/pop-os/launcher", Tag: "epoch-1.0.7"},
 			{Name: "xdg-desktop-portal-cosmic", URL: "https://github.com/pop-os/xdg-desktop-portal-cosmic", Tag: "epoch-1.0.7"},
 		},

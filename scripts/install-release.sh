@@ -57,20 +57,28 @@ install_runtime_deps() {
     echo "Installing runtime dependencies..."
     apt-get update -qq
     apt-get install -y --no-install-recommends \
+        accountsservice \
         curl \
         dbus \
+        iso-codes \
         libdbus-1-3 \
+        libdisplay-info1 \
         libflatpak0 \
+        libfontconfig1 \
+        libgbm1 \
         libgstreamer-plugins-base1.0-0 \
         libgstreamer1.0-0 \
         libinput10 \
         libpam0g \
+        libpipewire-0.3-0 \
         libpixman-1-0 \
+        libpulse0 \
         libseat1 \
         libssl3 \
         libwayland-client0 \
         libwayland-server0 \
         libxkbcommon0 \
+        network-manager \
         udev
 }
 

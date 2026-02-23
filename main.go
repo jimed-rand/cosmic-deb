@@ -39,44 +39,68 @@ type ReposConfig struct {
 }
 
 var buildDeps = []string{
+	"accountsservice",
 	"build-essential",
+	"cmake",
 	"curl",
+	"debhelper",
+	"devscripts",
+	"dh-cargo",
 	"git",
+	"iso-codes",
 	"libdbus-1-dev",
 	"libdisplay-info-dev",
+	"libegl1-mesa-dev",
 	"libflatpak-dev",
+	"libfontconfig1-dev",
+	"libgbm-dev",
+	"libgles2-mesa-dev",
 	"libglvnd-dev",
 	"libgstreamer-plugins-base1.0-dev",
 	"libgstreamer1.0-dev",
 	"libinput-dev",
+	"libnm-dev",
 	"libpam0g-dev",
+	"libpipewire-0.3-dev",
 	"libpixman-1-dev",
 	"libpulse-dev",
 	"libseat-dev",
 	"libssl-dev",
+	"libudev-dev",
+	"libvulkan-dev",
 	"libwayland-dev",
+	"libxcb-render0-dev",
+	"libxcb-shape0-dev",
+	"libxcb-xfixes0-dev",
+	"libxcb1-dev",
 	"libxkbcommon-dev",
 	"lld",
 	"pkg-config",
-	"rustup",
 }
 
 var runtimeDeps = []string{
+	"accountsservice",
 	"dbus",
+	"iso-codes",
 	"libdbus-1-3",
 	"libdisplay-info1",
 	"libflatpak0",
+	"libfontconfig1",
+	"libgbm1",
 	"libgstreamer-plugins-base1.0-0",
 	"libgstreamer1.0-0",
 	"libinput10",
 	"libpam0g",
+	"libpipewire-0.3-0",
 	"libpixman-1-0",
 	"libpulse0",
 	"libseat1",
-	"libssl3",
+	"libssl3 | libssl3t64",
+	"libudev1",
 	"libwayland-client0",
 	"libwayland-server0",
 	"libxkbcommon0",
+	"network-manager",
 	"udev",
 }
 
@@ -216,6 +240,12 @@ func installBuildDeps() {
 		die("Failed to install build dependencies: %v", err)
 	}
 	ensureCargoBinInPath()
+	if _, err := exec.LookPath("rustup"); err != nil {
+		log("rustup not found; installing via sh.rustup.rs")
+		if err := run("", "sh", "-c", "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"); err != nil {
+			die("Failed to install rustup: %v", err)
+		}
+	}
 	log("Configuring Rust stable toolchain via rustup")
 	if err := run("", "rustup", "default", "stable"); err != nil {
 		die("Failed to set rustup default to stable: %v", err)
@@ -517,9 +547,13 @@ func buildRepo(repoDir, repoName string, jobs int) error {
 	log("Building component: %s", repoName)
 	env := buildEnv()
 
+	cargoToml := filepath.Join(repoDir, "Cargo.toml")
+	if _, err := os.Stat(cargoToml); err == nil {
+		_ = run(repoDir, "sed", "-i", "s/lto = \"fat\"/lto = \"thin\"/", "Cargo.toml")
+	}
+
 	justfile := filepath.Join(repoDir, "justfile")
 	makefile := filepath.Join(repoDir, "Makefile")
-	cargotoml := filepath.Join(repoDir, "Cargo.toml")
 
 	if _, err := os.Stat(justfile); err == nil {
 		return runEnv(repoDir, env, "just", "build-release", "--frozen")
@@ -530,7 +564,7 @@ func buildRepo(repoDir, repoName string, jobs int) error {
 			"ARGS=--frozen --release",
 		)
 	}
-	if _, err := os.Stat(cargotoml); err == nil {
+	if _, err := os.Stat(cargoToml); err == nil {
 		return runEnv(repoDir, env, "cargo", "build", "--release", "--frozen",
 			fmt.Sprintf("--jobs=%d", jobs),
 		)
@@ -543,7 +577,7 @@ func installToStage(repoDir, stageDir string) error {
 	makefile := filepath.Join(repoDir, "Makefile")
 
 	if _, err := os.Stat(justfile); err == nil {
-		return run(repoDir, "just", "rootdir="+stageDir, "install")
+		return run(repoDir, "just", "rootdir="+stageDir, "DESTDIR="+stageDir, "install")
 	}
 	if _, err := os.Stat(makefile); err == nil {
 		return run(repoDir, "make",
@@ -554,6 +588,28 @@ func installToStage(repoDir, stageDir string) error {
 		)
 	}
 	return fmt.Errorf("no install target found for component %s", repoDir)
+}
+
+func buildWithDebian(repoDir, outDir string) error {
+	log("Using existing debian/ directory to build package...")
+	if err := run(repoDir, "dpkg-buildpackage", "-us", "-uc", "-b"); err != nil {
+		return err
+	}
+	parent := filepath.Dir(repoDir)
+	files, err := os.ReadDir(parent)
+	if err != nil {
+		return err
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f.Name(), ".deb") {
+			oldPath := filepath.Join(parent, f.Name())
+			newPath := filepath.Join(outDir, f.Name())
+			if err := os.Rename(oldPath, newPath); err != nil {
+				log("Warning: Failed to move .deb to output directory: %v", err)
+			}
+		}
+	}
+	return nil
 }
 
 func buildDebianPackage(cfg *Config, stageDir, outDir, pkgName, version string, deps []string) error {
@@ -628,6 +684,16 @@ func processRepo(cfg *Config, repo RepoEntry) bool {
 	}())
 	repoDir := downloadSource(cfg.workDir, repo, tag)
 	version := getVersion(repoDir, tag)
+
+	if _, err := os.Stat(filepath.Join(repoDir, "debian")); err == nil {
+		if err := buildWithDebian(repoDir, cfg.outDir); err == nil {
+			log("Successfully packaged %s using debian/ sources", repo.Name)
+			return true
+		} else {
+			log("Warning: debian/ build failed for %s: %v. Falling back to manual build.", repo.Name, err)
+		}
+	}
+
 	if err := buildRepo(repoDir, repo.Name, cfg.jobs); err != nil {
 		log("Warning: Build failed for %s: %v", repo.Name, err)
 		return false
@@ -651,20 +717,19 @@ func processRepo(cfg *Config, repo RepoEntry) bool {
 func main() {
 	cfg := &Config{}
 	useTui := flag.Bool("tui", false, "Launch interactive TUI wizard")
-	flag.StringVar(&cfg.globalTag, "tag", "", "Override tag for all repos (e.g. epoch-1.0.7). When omitted, per-repo tags from repos.json are used.")
+	flag.StringVar(&cfg.globalTag, "tag", "", "Override tag for all repos")
 	flag.StringVar(&cfg.reposFile, "repos", defaultReposFile, "Path to repos JSON config file")
-	flag.BoolVar(&cfg.updateRepos, "update-repos", false, "Fetch latest epoch tags from upstream and generate repos.json, then exit")
-	flag.BoolVar(&cfg.genConfig, "gen-config", false, "Generate repos.json from the current configuration without fetching updates, then exit")
-	flag.BoolVar(&cfg.devFinder, "dev-finder", false, "Developer: Update finder.go from the loaded repos config, then exit")
-	flag.StringVar(&cfg.workDir, "workdir", "cosmic-work", "Working directory for source checkout and compilation")
-	flag.StringVar(&cfg.outDir, "outdir", outputPkgDir, "Output directory for produced .deb packages")
-	flag.IntVar(&cfg.jobs, "jobs", runtime.NumCPU(), "Number of parallel compilation jobs")
-	flag.BoolVar(&cfg.skipDeps, "skip-deps", false, "Skip automatic installation of build dependencies")
-	flag.StringVar(&cfg.only, "only", "", "Restrict the build to a single named cosmic-* component")
+	flag.BoolVar(&cfg.updateRepos, "update-repos", false, "Fetch latest epoch tags and exit")
+	flag.BoolVar(&cfg.genConfig, "gen-config", false, "Generate repos.json and exit")
+	flag.BoolVar(&cfg.devFinder, "dev-finder", false, "Update finder.go and exit")
+	flag.StringVar(&cfg.workDir, "workdir", "cosmic-work", "Working directory")
+	flag.StringVar(&cfg.outDir, "outdir", outputPkgDir, "Output directory")
+	flag.IntVar(&cfg.jobs, "jobs", runtime.NumCPU(), "Parallel jobs")
+	flag.BoolVar(&cfg.skipDeps, "skip-deps", false, "Skip dependency installation")
+	flag.StringVar(&cfg.only, "only", "", "Restrict build to a single component")
 	flag.Parse()
 
 	ensureCargoBinInPath()
-
 	checkAptBased()
 	distroID, codename := detectDistro()
 	checkMinVersion(distroID, codename)
