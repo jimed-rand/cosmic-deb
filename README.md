@@ -33,19 +33,19 @@ make build
 
 `cosmic-deb` supports two distinct source acquisition strategies, selectable at runtime via both the interactive CLI prompt and the TUI wizard:
 
-**Epoch Tag** — Checks out a specific, versioned release tag (e.g., `epoch-1.0.7`) from each repository. This is the stable, reproducible option and is appropriate for production packaging or when a known-good baseline is required.
+**Default Branch (Recommended)** — Clones or downloads the current HEAD of each repository's default branch (typically `master` for hepp3n's Codeberg forks). This mode tracks the latest packaging state including the `debian/` directory metadata, and is the recommended approach since hepp3n manages versioning through `debian/changelog` on the primary branch rather than through git tags. The version number is extracted dynamically from the `debian/changelog` file at build time.
 
-**Main Branch HEAD** — Clones or downloads the current HEAD of each repository's default branch (`main`). This mode targets the latest unreleased code and is the appropriate choice when the epoch tags lag behind the actual upstream development state, which is common for hepp3n's Codeberg forks where active work occurs on the main branch ahead of formal tagging.
+**Epoch Tag** — Checks out a specific, versioned release tag (e.g., `epoch-1.0.0`) from each repository. This is the reproducible option and is appropriate when a known-good baseline is required. Available tags are discovered dynamically from the upstream repositories via `git ls-remote` without any hardcoded version references.
 
 The source mode can also be forced non-interactively via the `-use-branch` flag:
 
 ```bash
-sudo ./cosmic-deb -use-branch
+./cosmic-deb -use-branch
 ```
 
 ## Configuration and Metadata Integration
 
-A distinguishing feature of this utility is the encapsulation of repository metadata directly within the binary via `finder.go`. This design decision minimises external file dependencies, thereby enhancing the portability and integrity of the build process. The metadata points exclusively to verified Codeberg forks maintained by hepp3n, which contain the essential `debian/` directory structures (including `control`, `rules`, and `changelog` files) required for native Debianisation.
+A distinguishing feature of this utility is the encapsulation of repository metadata directly within the binary via `finder.go`. This design decision minimises external file dependencies, thereby enhancing the portability and integrity of the build process. The metadata points exclusively to verified Codeberg forks maintained by hepp3n, which contain the essential `debian/` directory structures (including `control`, `rules`, and `changelog` files) required for native Debianisation. No version information is hardcoded; all tags and versions are resolved dynamically at runtime from the upstream repositories.
 
 To synchronise the embedded configuration with the latest upstream epoch tags, the following command should be executed periodically:
 
@@ -67,10 +67,12 @@ Where a `debian/` directory is identified, `cosmic-deb` invokes the `dpkg-buildp
 
 ### Comprehensive Environment Synthesis
 
-As the build process involves the installation of systemic dependencies and the generation of privileged package files, root access is mandatory. Execution of the orchestrator is initiated as follows:
+The `cosmic-deb` orchestrator is designed to operate within a standard user environment, necessitating elevated privileges only for the installation of systemic dependencies. By executing the utility as a non-privileged user, the resulting compilation artifacts and source repositories remain owned by the current user, thereby ensuring a cleaner and more secure build lifecycle. The orchestrator will proactively prompt for a `sudo` password when systemic modifications are required.
+
+Execution of the orchestrator is initiated as follows:
 
 ```bash
-sudo ./cosmic-deb
+./cosmic-deb
 ```
 
 Upon launch, the interactive prompt will ask you to select a source mode. Enter `b` to build from the main branch HEAD, or select a numbered epoch tag from the list:

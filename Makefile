@@ -57,19 +57,19 @@ uninstall: banner
 
 run: build
 	@echo ">> Starting $(BINARY)..."
-	@sudo ./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS)
+	@./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS)
 
 run-tui: build
 	@echo ">> Launching TUI interface..."
-	@sudo ./$(BINARY) $(TAG_ARG) -repos $(REPOS) -tui
+	@./$(BINARY) $(TAG_ARG) -repos $(REPOS) -tui
 
 run-branch: build
 	@echo ">> Starting $(BINARY) with main branch HEAD..."
-	@sudo ./$(BINARY) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -use-branch
+	@./$(BINARY) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -use-branch
 
 run-skip-deps: build
 	@echo ">> Running without dependency installation..."
-	@sudo ./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -skip-deps
+	@./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -skip-deps
 
 run-only: build
 	@if [ -z "$(COMPONENT)" ]; then \
@@ -77,7 +77,7 @@ run-only: build
 		exit 1; \
 	fi
 	@echo ">> Packaging $(COMPONENT)..."
-	@sudo ./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -only $(COMPONENT)
+	@./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -only $(COMPONENT)
 
 update-repos: build
 	@echo ">> Refreshing repository epoch tags..."

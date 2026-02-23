@@ -435,10 +435,16 @@ func collectAllBuildDeps() []string {
 }
 
 func installBuildDeps() {
-	log("Installing build dependencies via apt-get")
+	log("Installing build dependencies (may require sudo password)")
 	allDeps := collectAllBuildDeps()
 	args := append([]string{"install", "-y", "--no-install-recommends"}, allDeps...)
-	if err := run("", "apt-get", args...); err != nil {
+	executable := "apt-get"
+	execArgs := args
+	if os.Geteuid() != 0 {
+		executable = "sudo"
+		execArgs = append([]string{"apt-get"}, args...)
+	}
+	if err := run("", executable, execArgs...); err != nil {
 		die("Failed to install build dependencies: %v", err)
 	}
 	ensureCargoBinInPath()
@@ -497,7 +503,11 @@ func loadReposConfig(path string) (*ReposConfig, string) {
 }
 
 func latestEpochTag(repoURL string) string {
-	cmd := exec.Command("git", "ls-remote", "--tags", "--sort=-version:refname", repoURL)
+	cloneURL := repoURL
+	if !strings.HasSuffix(cloneURL, ".git") {
+		cloneURL += ".git"
+	}
+	cmd := exec.Command("git", "ls-remote", "--tags", "--sort=-version:refname", cloneURL)
 	out, err := cmd.Output()
 	if err != nil {
 		return ""
@@ -532,7 +542,7 @@ func updateReposConfig(path string, existing *ReposConfig) *ReposConfig {
 			URL:    repo.URL,
 			Branch: repo.Branch,
 		}
-		tag := latestEpochTag(repo.URL + ".git")
+		tag := latestEpochTag(repo.URL)
 		if tag != "" {
 			entry.Tag = tag
 			if latestEpoch == "" {
@@ -607,7 +617,7 @@ func archiveURL(repo RepoEntry, tag string) string {
 	}
 	branch := repo.Branch
 	if branch == "" {
-		branch = "main"
+		branch = defaultBranch(repo.URL)
 	}
 	return fmt.Sprintf("%s/archive/refs/heads/%s.tar.gz", repo.URL, branch)
 }
@@ -709,7 +719,27 @@ func downloadSource(workDir string, repo RepoEntry, tag string) string {
 	return dest
 }
 
+func getVersionFromChangelog(repoDir string) string {
+	changelogPath := filepath.Join(repoDir, "debian", "changelog")
+	if _, err := os.Stat(changelogPath); err != nil {
+		return ""
+	}
+	cmd := exec.Command("dpkg-parsechangelog", "--file="+changelogPath, "--show-field", "Version")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	v := strings.TrimSpace(string(out))
+	if idx := strings.Index(v, "-"); idx > 0 {
+		v = v[:idx]
+	}
+	return v
+}
+
 func getVersion(repoDir, fallbackTag string) string {
+	if v := getVersionFromChangelog(repoDir); v != "" {
+		return v
+	}
 	cargoPath := filepath.Join(repoDir, "Cargo.toml")
 	if _, err := os.Stat(cargoPath); err == nil {
 		if data, err := os.ReadFile(cargoPath); err == nil {
@@ -1153,12 +1183,13 @@ func main() {
 		log("Using per-repo tags from: %s", actualReposFile)
 	}
 
+	if !cfg.skipDeps {
+		installBuildDeps()
+	} else {
+		ensureCargoBinInPath()
+	}
+
 	buildFunc := func() {
-		if !cfg.skipDeps {
-			installBuildDeps()
-		} else {
-			ensureCargoBinInPath()
-		}
 		if err := os.MkdirAll(cfg.workDir, 0755); err != nil {
 			die("Failed to create working directory: %v", err)
 		}
