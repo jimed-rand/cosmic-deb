@@ -143,7 +143,7 @@ This utility is provided strictly for academic and operational automation purpos
 
 ### The Builder Project
 
-The `cosmic-deb` build automation tool and its associated source code within this repository are distributed under open-source provisions. Operators and contributors are granted the freedom to study, modify, and redistribute this utility in accordance with standard open-source stipulations.
+The `cosmic-deb` build automation tool and its associated source code within this repository are distributed under open-source provisions. Licensed under the GNU General Public License v2.0 or later (GPL-2.0-or-later). Operators and contributors are granted the freedom to study, modify, and redistribute this utility in accordance with standard open-source stipulations.
 
 ### COSMIC Desktop Environment
 
