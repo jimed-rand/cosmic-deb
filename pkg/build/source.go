@@ -102,9 +102,11 @@ func DownloadSource(workDir string, repo repos.Entry, tag string, logFn func(str
 		logFn("Expected extracted directory not found for %s; falling back to git clone", repo.Name)
 		return GitClone(workDir, repo, tag, dest, logFn)
 	}
-	if err := os.Rename(extractedDir, dest); err != nil {
-		logFn("ERROR: Failed to rename extracted directory for %s: %v", repo.Name, err)
-		os.Exit(1)
+	if extractedDir != dest {
+		if err := os.Rename(extractedDir, dest); err != nil {
+			logFn("ERROR: Failed to rename extracted directory for %s: %v", repo.Name, err)
+			os.Exit(1)
+		}
 	}
 	_ = os.Remove(tarPath)
 	return dest
