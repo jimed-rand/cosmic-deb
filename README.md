@@ -12,7 +12,7 @@ Furthermore, this utility incorporates advanced logic to ascertain the current s
 
 To ensure the successful execution of the build process, the host system must satisfy the following prerequisites:
 
-- **Operating System:** Debian 12 (Bookworm) or a subsequent release, or alternatively, Ubuntu 22.04 (Jammy Jellyfish) or a subsequent release.
+- **Operating System:** Debian 12 (Bookworm) or a subsequent release, or alternatively, Ubuntu 22.04 (Jammy Jellyfish) or a subsequent LTS release. Also applied with the Developmental branch of Ubuntu (`devel`). **Note:** Non-LTS iterations of Ubuntu are explicitly unsupported due to their ephemeral lifecycle and inherent unsuitability for stable deployment environments.
 - **Core Utilities:** The presence of `apt-get`, `git`, `curl`, `fakeroot`, and `dpkg-dev` is mandatory for dependency resolution and package assembly.
 - **Compiler:** Go version 1.24 or later is requisite for the initial compilation of the builder itself.
 
