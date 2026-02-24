@@ -1,6 +1,6 @@
 # cosmic-deb
 
-**A comprehensive build framework by James Ed Randson, built upon the foundational packaging schemas of hepp3n.**
+**A comprehensive build framework by James Ed Randson (jimed-rand/jimedrand) for creating the Debian/Ubuntu `.deb` packages for the COSMIC Desktop Environment, built upon the foundational packaging schemas of hepp3n.**
 
 This repository presents a comprehensive build automation tool, meticulously designed for the compilation and packaging of the COSMIC Desktop Environment into native Debian and Ubuntu `.deb` package formats. The underlying architecture and packaging sources are derived from and maintained by [hepp3n on Codeberg](https://codeberg.org/hepp3n), serving as the foundational framework for this build suite. The primary objective of this utility is to standardise the deployment process, ensuring a reproducible and structured method for integrating the COSMIC ecosystem into diverse Debian-based operating systems.
 
