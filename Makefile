@@ -14,7 +14,7 @@ SCRIPTDIR  := $(DESTDIR)$(PREFIX)/share/cosmic-deb/scripts
 
 TAG_ARG    := $(if $(TAG),-tag $(TAG),)
 
-.PHONY: all build clean install uninstall run run-tui run-skip-deps run-only run-branch update-repos fmt vet tidy help
+.PHONY: all build clean install uninstall run run-tui run-verbose run-skip-deps run-only run-branch update-repos fmt vet tidy help
 
 all: build
 
@@ -48,6 +48,10 @@ uninstall:
 run: build
 	@echo ">> Starting $(BINARY)..."
 	@./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS)
+
+run-verbose: build
+	@echo ">> Starting $(BINARY) with verbose logging..."
+	@./$(BINARY) $(TAG_ARG) -repos $(REPOS) -outdir $(OUTDIR) -workdir $(WORKDIR) -jobs $(JOBS) -verbose
 
 run-tui: build
 	@echo ">> Launching TUI interface..."
@@ -92,6 +96,7 @@ help:
 	@echo "Targets:"
 	@echo "  build              Compile the orchestrator"
 	@echo "  run                Full build pipeline (interactive source selection)"
+	@echo "  run-verbose        Full build pipeline with verbose logging enabled"
 	@echo "  run-tui            Launch TUI configuration wizard"
 	@echo "  run-branch         Build from main branch HEAD"
 	@echo "  run-only           Build single component (COMPONENT=name)"

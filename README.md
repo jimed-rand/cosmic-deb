@@ -38,6 +38,16 @@ Upon execution, the operator is prompted to designate a source acquisition strat
 
 To systematically categorise and prevent nomenclature collisions across distinct operating system iterations, the generated packages are appended with the distribution's codename (for example, `cosmic-comp_1.0.0~noble_amd64.deb`). After the comprehensive assembly of all constituent components, the system autonomously performs a systematic cleanup, purging the source and staging directories. Subsequently, if the operational context is identified as a bare-metal or conventional virtual machine environment rather than an isolated container (such as Docker or LXC), the operator is offered a direct installation pathway for the compiled packages.
 
+### Verbose Logging
+
+For developers and power users who require detailed insight into every discrete step of the build pipeline, the `-verbose` flag can be appended to any invocation:
+
+```sh
+./cosmic-deb -verbose
+```
+
+When verbose mode is active, the builder emits timestamped `[VERBOSE]` log lines for every internal decision point, including: resolved flag values at startup, detected CPU core count, individual dependency check results, archive download URLs, extraction paths, build system detection per component, staging directory validation, version resolution strategy, and cleanup operations. This level of transparency is particularly useful for diagnosing build failures, understanding the exact sequence of actions taken, and auditing the build environment.
+
 ### Terminal User Interface (TUI)
 
 For a graphically augmented interactive experience within the terminal, append the requisite flag:
@@ -64,11 +74,13 @@ This instantiation provides a structured, full-screen navigational wizard. The i
 | `-update-repos` | `false` | Contacts upstream remote repositories to fetch recent epoch tags and overwrites the configuration. |
 | `-gen-config` | `false` | Extracts the internal configuration and exports it to a `repos.json` file. |
 | `-dev-finder` | `false` | Facilitates developer operations by regenerating `pkg/repos/finder.go` from the active schema. |
+| `-verbose` | `false` | Enables verbose timestamped logging for all internal build decisions and operations. |
 
 ### Makefile Directives
 
 ```sh
 make run                    # Executes the primary pipeline with interactive source designation
+make run-verbose            # Executes the primary pipeline with verbose logging enabled
 make run-tui                # Executes the primary pipeline accompanied by the TUI wizard
 make run-branch             # Initiates compilation exclusively from the primary branch HEAD
 make run-only COMPONENT=cosmic-term
@@ -107,7 +119,7 @@ make clean                  # Purges the designated working directories and comp
 
 ```
 cosmic-deb/
-├── exec.go                    # Auxiliary shell execution logic
+├── main.go                    # Entry point: flag parsing, orchestration logic, verbose logging
 ├── go.mod / go.sum            # Go module dependency manifest configurations
 ├── Makefile                   # Methodological build and execution directives
 ├── README.md                  # Comprehensive academic documentation
@@ -123,7 +135,7 @@ cosmic-deb/
 │   │   ├── deps.go            # Distribution-specific dependency mapping logic
 │   │   └── detect.go          # Methodologies for distribution identification and container heuristics
 │   ├── repos/
-│   │   ├── finder.go          # Hardcoded native repository enumeration (hepp3n/Codeberg)
+│   │   ├── finder.go          # Native repository enumeration (hepp3n/Codeberg)
 │   │   ├── loader.go          # Configuration ingestion, epoch tag querying, and state mutation
 │   │   └── types.go           # Structural definitions for repositories and related configurations
 │   └── tui/

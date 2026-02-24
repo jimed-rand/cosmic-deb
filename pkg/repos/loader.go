@@ -178,3 +178,6 @@ func GenerateFinderGo(cfg *Config) (string, error) {
 	sb.WriteString("\t\t},\n\t}\n}\n")
 	return sb.String(), nil
 }
+func MarshalConfig(cfg *Config) ([]byte, error) {
+	return json.MarshalIndent(cfg, "", "  ")
+}
