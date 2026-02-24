@@ -16,25 +16,25 @@ The efficacy of this framework is contingent upon its deployment within an APT-b
 
 | Distribution | Supported Release Iterations |
 |:---|:---|
-| **Debian GNU/Linux** | Version 12 (Bookworm) and subsequent stable/testing branches. |
-| **Ubuntu Linux** | Current LTS releases (e.g., 22.04 Jammy, 24.04 Noble) and development branches (e.g., Plucky Puffin). |
+| **Debian GNU/Linux** | Version 12 (Bookworm) and subsequent stable/testing branches (Trixie, Forky, Sid). |
+| **Ubuntu Linux** | LTS releases (22.04 Jammy, 24.04 Noble, 26.04 Resolute) and development branch (devel). |
 
-*Note: Non-LTS intermediate releases are deprecated in favour of more robust development cycles and stable long-term support foundations.*
+*Note: Package availability is resolved at runtime per detected codename; only LTS and devel releases are supported.*
 
 ## Distro-Aware Dependency Resolution
 
 Build dependencies are resolved dynamically at runtime based on the detected distribution and release codename. This ensures that packages installed are appropriate for the host system and avoids conflicts caused by package naming differences or availability gaps across releases.
 
-The following table summarises per-release dependency behaviour:
+The following table summarises per-release dependency behaviour, verified against packages.debian.org and packages.ubuntu.com:
 
-| Package | Debian Bookworm | Debian Trixie/Sid | Ubuntu Jammy | Ubuntu Noble/Plucky |
+| Package | Debian Bookworm | Debian Trixie/Forky/Sid | Ubuntu Jammy | Ubuntu Noble/Resolute |
 |:---|:---:|:---:|:---:|:---:|
 | `libdisplay-info-dev` | No | Yes | No | Yes |
-| `rust-all` | Yes | Yes | No | Yes |
-| `dh-cargo` | Yes | Yes | No | Yes |
+| `rust-all` | Yes | Yes | Yes | Yes |
+| `dh-cargo` | Yes | Yes | Yes | Yes |
 | `just` (via apt) | No | Yes | No | No |
 
-When `just` is not available through APT (Debian Bookworm, all Ubuntu releases), `cosmic-deb` automatically installs it via `cargo install just` after the toolchain setup phase. Similarly, when `rust-all` is absent (Ubuntu Jammy), the individual `rustc` and `cargo` packages are used in conjunction with a `rustup`-managed stable toolchain. The `libdisplay-info-dev` package is conditionally added to the build dependency set for both global and per-component (`cosmic-comp`, `cosmic-settings`) resolution only on releases where it is available in the official repositories.
+When `just` is not available through APT (Debian Bookworm, all Ubuntu releases), `cosmic-deb` automatically installs it via `cargo install just` after the toolchain setup phase. The `libdisplay-info-dev` package is conditionally added to the build dependency set for both global and per-component (`cosmic-comp`, `cosmic-settings`) resolution only on releases where it is available in the official repositories. All other conditional packages (`rust-all`, `dh-cargo`) are available across all supported Debian and Ubuntu releases and are included unconditionally per distro family.
 
 ## Methodological Compilation
 

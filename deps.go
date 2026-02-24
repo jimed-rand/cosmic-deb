@@ -9,7 +9,7 @@ func hasDisplayInfoDev(distroID, codename string) bool {
 		}
 	case "ubuntu":
 		switch codename {
-		case "noble", "plucky", "devel":
+		case "noble", "resolute", "devel":
 			return true
 		}
 	}
@@ -22,7 +22,7 @@ func hasRustAll(distroID, codename string) bool {
 		return true
 	case "ubuntu":
 		switch codename {
-		case "noble", "plucky", "devel":
+		case "jammy", "noble", "resolute", "devel":
 			return true
 		}
 	}
@@ -35,7 +35,7 @@ func hasDhCargo(distroID, codename string) bool {
 		return true
 	case "ubuntu":
 		switch codename {
-		case "noble", "plucky", "devel":
+		case "jammy", "noble", "resolute", "devel":
 			return true
 		}
 	}
@@ -81,7 +81,7 @@ func resolveGlobalBuildDeps(distroID, codename string) []string {
 		"libgstreamer1.0-dev",
 		"libinput-dev",
 		"libnm-dev",
-		"libpam-dev",
+		"libpam0g-dev",
 		"libpipewire-0.3-dev",
 		"libpixman-1-dev",
 		"libpulse-dev",
@@ -115,7 +115,7 @@ func resolveGlobalBuildDeps(distroID, codename string) []string {
 		"gettext",
 		"itstool",
 		"wayland-protocols",
-		"libgdk-pixbuf2.0-dev",
+		"libgdk-pixbuf-2.0-dev",
 		"dh-exec",
 	}
 
@@ -189,7 +189,7 @@ func resolvePerComponentBuildDeps(distroID, codename string) map[string][]string
 		},
 		"cosmic-greeter": {
 			"debhelper", "git", "just", "libclang-dev",
-			"libinput-dev", "libpam-dev", "libwayland-dev",
+			"libinput-dev", "libpam0g-dev", "libwayland-dev",
 			"libxkbcommon-dev", "pkg-config",
 		},
 		"cosmic-settings-daemon": {

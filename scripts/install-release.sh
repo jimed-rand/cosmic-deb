@@ -28,7 +28,7 @@ check_min_version() {
     local codename="$2"
 
     declare -A debian_supported=( [bookworm]=1 [trixie]=1 [forky]=1 [sid]=1 [unstable]=1 [testing]=1 )
-    declare -A ubuntu_supported=( [jammy]=1 [noble]=1 [plucky]=1 [devel]=1 )
+    declare -A ubuntu_supported=( [jammy]=1 [noble]=1 [resolute]=1 [devel]=1 )
 
     if [ "$id" = "debian" ]; then
         if [ -z "${debian_supported[$codename]}" ]; then
@@ -37,7 +37,7 @@ check_min_version() {
         fi
     elif [ "$id" = "ubuntu" ]; then
         if [ -z "${ubuntu_supported[$codename]}" ]; then
-            echo "ERROR: Ubuntu release '$codename' is not supported. Only LTS and devel releases are supported (e.g., jammy, noble, or plucky)." >&2
+            echo "ERROR: Ubuntu release '$codename' is not supported. Only LTS and devel releases are supported (e.g., jammy, noble, or resolute)." >&2
             exit 1
         fi
     else

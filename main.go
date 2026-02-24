@@ -210,10 +210,10 @@ func checkMinVersion(id, codename string) {
 		"testing":  true,
 	}
 	ubuntuMinimum := map[string]bool{
-		"jammy":  true,
-		"noble":  true,
-		"plucky": true,
-		"devel":  true,
+		"jammy":    true,
+		"noble":    true,
+		"resolute": true,
+		"devel":    true,
 	}
 	switch id {
 	case "debian":
@@ -222,7 +222,7 @@ func checkMinVersion(id, codename string) {
 		}
 	case "ubuntu":
 		if !ubuntuMinimum[codename] {
-			die("Ubuntu release '%s' is not supported. Only LTS and devel releases are supported (e.g., jammy, noble, or plucky)", codename)
+			die("Ubuntu release '%s' is not supported. Only LTS and devel releases are supported (e.g., jammy, noble, or resolute)", codename)
 		}
 	default:
 		die("Distribution '%s' is not supported. Only Debian and Ubuntu are supported by this tool", id)
