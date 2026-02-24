@@ -14,26 +14,16 @@ SCRIPTDIR  := $(DESTDIR)$(PREFIX)/share/cosmic-deb/scripts
 
 TAG_ARG    := $(if $(TAG),-tag $(TAG),)
 
-.PHONY: all build clean install uninstall run run-tui run-skip-deps run-only run-branch update-repos fmt vet tidy help banner
+.PHONY: all build clean install uninstall run run-tui run-skip-deps run-only run-branch update-repos fmt vet tidy help
 
 all: build
 
-banner:
-	@echo "--------------------------------------------------------------------------------"
-	@echo "  ____ ___  ____  __  __ ___ ____   ____  _____ ____ "
-	@echo " / ___/ _ \/ ___||  \/  |_ _/ ___| |  _ \| ____| __ )"
-	@echo "| |  | | | \___ \| |\/| || | |     | | | |  _| |  _ \ "
-	@echo "| |__| |_| |___) | |  | || | |___  | |_| | |___| |_)"
-	@echo " \____\___/|____/|_|  |_|___\____| |____/|_____|____/ "
-	@echo "--------------------------------------------------------------------------------"
-	@echo ""
-
-build: banner
+build:
 	@echo ">> Building $(BINARY)..."
 	@$(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BINARY) .
 	@echo ">> Build complete."
 
-clean: banner
+clean:
 	@echo ">> Cleaning workspace..."
 	@rm -f $(BINARY)
 	@rm -rf $(OUTDIR)
@@ -44,16 +34,16 @@ install: build
 	@install -d $(BINDIR)
 	@install -m 0755 $(BINARY) $(BINDIR)/$(BINARY)
 	@install -d $(SCRIPTDIR)
-	@install -m 0755 scripts/install-local.sh    $(SCRIPTDIR)/install-local.sh
-	@install -m 0755 scripts/install-release.sh  $(SCRIPTDIR)/install-release.sh
-	@install -m 0755 scripts/uninstall.sh        $(SCRIPTDIR)/uninstall.sh
-	@echo ">> Binary and scripts installed."
+	@install -m 0755 scripts/install-local.sh   $(SCRIPTDIR)/install-local.sh
+	@install -m 0755 scripts/install-release.sh $(SCRIPTDIR)/install-release.sh
+	@install -m 0755 scripts/uninstall.sh       $(SCRIPTDIR)/uninstall.sh
+	@echo ">> Installed."
 
-uninstall: banner
+uninstall:
 	@echo ">> Uninstalling from $(PREFIX)..."
 	@rm -f $(BINDIR)/$(BINARY)
 	@rm -rf $(DESTDIR)$(PREFIX)/share/cosmic-deb
-	@echo ">> Files removed."
+	@echo ">> Uninstalled."
 
 run: build
 	@echo ">> Starting $(BINARY)..."
@@ -84,35 +74,35 @@ update-repos: build
 	@./$(BINARY) -repos $(REPOS) -update-repos
 	@echo ">> Metadata updated."
 
-fmt: banner
-	@echo ">> Standardising source formatting..."
+fmt:
+	@echo ">> Formatting source..."
 	@$(GO) fmt ./...
 
-vet: banner
-	@echo ">> Analyzing code for common mistakes..."
+vet:
+	@echo ">> Vetting source..."
 	@$(GO) vet ./...
 
-tidy: banner
+tidy:
 	@echo ">> Tidying module dependencies..."
 	@$(GO) mod tidy
 
-help: banner
-	@echo "Usage:"
-	@echo "  make <target> [VARIABLES]"
+help:
+	@echo "Usage: make <target> [VARIABLES]"
 	@echo ""
 	@echo "Targets:"
 	@echo "  build              Compile the orchestrator"
-	@echo "  run                Execute the full build pipeline (interactive source selection)"
-	@echo "  run-tui            Start with interactive TUI configuration"
-	@echo "  run-branch         Execute pipeline using main branch HEAD for all repos"
-	@echo "  run-only           Build specific component (COMPONENT=name)"
-	@echo "  update-repos       Fetch latest release tags from upstream"
-	@echo "  install            Deploy binary to system paths"
-	@echo "  uninstall          Remove system deployment"
-	@echo "  clean              Reset workspace to initial state"
+	@echo "  run                Full build pipeline (interactive source selection)"
+	@echo "  run-tui            Launch TUI configuration wizard"
+	@echo "  run-branch         Build from main branch HEAD"
+	@echo "  run-only           Build single component (COMPONENT=name)"
+	@echo "  update-repos       Fetch latest epoch tags from upstream"
+	@echo "  install            Install binary and scripts to system paths"
+	@echo "  uninstall          Remove system installation"
+	@echo "  clean              Remove binary and output directory"
 	@echo ""
 	@echo "Variables:"
 	@echo "  TAG=epoch-x.x.x    Override all repository tags"
-	@echo "  OUTDIR=path        Change package output path"
-	@echo "  WORKDIR=path       Change build staging path"
-	@echo "  JOBS=n             Concurrent compilation units"
+	@echo "  OUTDIR=path        Output directory for .deb files"
+	@echo "  WORKDIR=path       Build staging directory"
+	@echo "  JOBS=n             Parallel compilation jobs"
+	@echo "  COMPONENT=name     Component name for run-only"

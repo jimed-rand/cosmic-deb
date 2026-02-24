@@ -12,16 +12,13 @@ import (
 type Step int
 
 const (
-	StepMaintainerName Step = iota
-	StepMaintainerEmail
-	StepRelease
+	StepRelease Step = iota
 	StepWorkDir
 	StepOutDir
 	StepJobs
 	StepSkipDeps
 	StepOnly
 	StepConfirm
-	StepDone
 )
 
 type MenuOption struct {
@@ -43,15 +40,17 @@ type Model struct {
 	Distro    string
 	Codename  string
 	Releases  []string
+	Maintainer string
 }
 
-func NewModel(distro, codename string, releases []string) Model {
+func NewModel(distro, codename, maintainer string, releases []string) Model {
 	m := Model{
-		Step:     StepMaintainerName,
-		Choices:  make(map[string]string),
-		Distro:   distro,
-		Codename: codename,
-		Releases: releases,
+		Step:       StepRelease,
+		Choices:    make(map[string]string),
+		Distro:     distro,
+		Codename:   codename,
+		Releases:   releases,
+		Maintainer: maintainer,
 	}
 	m.initInput()
 	return m
@@ -67,15 +66,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Width = msg.Width
 		m.Height = msg.Height
 		return m, nil
-
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c":
+		if msg.String() == "ctrl+c" {
 			m.Quitting = true
 			return m, tea.Quit
 		}
 	}
-
 	if m.isMenuStep() {
 		return m.updateMenu(msg)
 	}
@@ -84,7 +80,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) isMenuStep() bool {
 	switch m.Step {
-	case StepMaintainerName, StepMaintainerEmail, StepWorkDir, StepOutDir, StepOnly:
+	case StepWorkDir, StepOutDir, StepOnly:
 		return false
 	}
 	return true
@@ -143,7 +139,6 @@ func (m Model) View() string {
 	if m.Quitting {
 		return ""
 	}
-
 	w := m.Width
 	if w == 0 {
 		w = 80
@@ -159,7 +154,7 @@ func (m Model) View() string {
 	sectionTitle := lipgloss.NewStyle().Bold(true)
 
 	stepLabel, stepDesc := m.getStepInfo()
-	header := title.Render(fmt.Sprintf("COSMIC Debian Builder (%s %s)", m.Distro, m.Codename))
+	header := title.Render(fmt.Sprintf("COSMIC Debian Builder — %s %s", m.Distro, m.Codename))
 	stepLine := sectionTitle.Render(stepLabel)
 
 	var body string
@@ -169,7 +164,7 @@ func (m Model) View() string {
 		for i, opt := range opts {
 			label := fmt.Sprintf("  %s", opt.Text)
 			if opt.Desc != "" {
-				label += fmt.Sprintf(" (%s)", opt.Desc)
+				label += fmt.Sprintf("  (%s)", opt.Desc)
 			}
 			if i == m.Cursor {
 				lines = append(lines, highlight.Render(label))
@@ -198,13 +193,10 @@ func (m Model) View() string {
 
 	mainContent := lipgloss.JoinVertical(lipgloss.Left,
 		header,
-		strings.Repeat("─", 50),
-		"",
+		strings.Repeat("─", 50), "",
 		stepLine,
-		stepDesc,
-		"",
-		body,
-		"",
+		stepDesc, "",
+		body, "",
 		strings.Repeat("─", 50),
 		"Navigate: Up/Down  Select: Enter  Quit: Ctrl+C",
 	)
@@ -221,10 +213,6 @@ func (m Model) View() string {
 
 func (m Model) getStepInfo() (string, string) {
 	switch m.Step {
-	case StepMaintainerName:
-		return "[ Maintainer Name ]", "Enter your full name for package metadata"
-	case StepMaintainerEmail:
-		return "[ Maintainer Email ]", "Enter your email for package metadata"
 	case StepRelease:
 		return "[ Source Mode ]", "Select an epoch tag or build from the main branch HEAD"
 	case StepWorkDir:
@@ -256,19 +244,19 @@ func (m Model) getMenuOptions() []MenuOption {
 	case StepJobs:
 		n := runtime.NumCPU()
 		return []MenuOption{
-			{fmt.Sprintf("%d", n), "System Default", fmt.Sprintf("Use all %d cores", n)},
-			{"1", "Serial", "Use 1 core (safest)"},
-			{"4", "Quad", "Use 4 cores"},
+			{Key: fmt.Sprintf("%d", n), Text: "System Default", Desc: fmt.Sprintf("Use all %d cores", n)},
+			{Key: "1", Text: "Serial", Desc: "Use 1 core (safest)"},
+			{Key: "4", Text: "Quad", Desc: "Use 4 cores"},
 		}
 	case StepSkipDeps:
 		return []MenuOption{
-			{"n", "Yes", "Perform automatic installation"},
-			{"y", "No", "Skip installation (I'll handle it myself)"},
+			{Key: "n", Text: "Yes", Desc: "Perform automatic installation"},
+			{Key: "y", Text: "No", Desc: "Skip installation (I'll handle it myself)"},
 		}
 	case StepConfirm:
 		return []MenuOption{
-			{"y", "Proceed", "Start the build process"},
-			{"n", "Abort", "Exit without building"},
+			{Key: "y", Text: "Proceed", Desc: "Start the build process"},
+			{Key: "n", Text: "Abort", Desc: "Exit without building"},
 		}
 	}
 	return nil
@@ -280,6 +268,7 @@ func (m *Model) selectOption(opt MenuOption) {
 		m.Choices["release"] = opt.Key
 		m.Step = StepWorkDir
 		m.Cursor = 0
+		m.initInput()
 	case StepJobs:
 		m.Choices["jobs"] = opt.Key
 		m.Step = StepSkipDeps
@@ -291,10 +280,8 @@ func (m *Model) selectOption(opt MenuOption) {
 	case StepConfirm:
 		if opt.Key == "y" {
 			m.Confirmed = true
-			m.Quitting = true
-		} else {
-			m.Quitting = true
 		}
+		m.Quitting = true
 	}
 }
 
@@ -305,10 +292,6 @@ func (m *Model) initInput() {
 
 func (m Model) getInputDefault() string {
 	switch m.Step {
-	case StepMaintainerName:
-		return "cosmic-deb"
-	case StepMaintainerEmail:
-		return "cosmic-deb@example.com"
 	case StepWorkDir:
 		return "cosmic-work"
 	case StepOutDir:
@@ -321,16 +304,12 @@ func (m Model) getInputDefault() string {
 
 func (m Model) getInputPrompt() string {
 	switch m.Step {
-	case StepMaintainerName:
-		return "Name:"
-	case StepMaintainerEmail:
-		return "Email:"
 	case StepWorkDir:
-		return "Path:"
+		return "Workspace path:"
 	case StepOutDir:
-		return "Path:"
+		return "Output path:"
 	case StepOnly:
-		return "Component (e.g. cosmic-term):"
+		return "Component (e.g. cosmic-term), or leave blank for all:"
 	}
 	return ">"
 }
@@ -341,16 +320,10 @@ func (m *Model) commitInput() {
 		val = m.getInputDefault()
 	}
 	switch m.Step {
-	case StepMaintainerName:
-		m.Choices["maintainer_name"] = val
-		m.Step = StepMaintainerEmail
-	case StepMaintainerEmail:
-		m.Choices["maintainer_email"] = val
-		m.Step = StepRelease
-		m.Cursor = 0
 	case StepWorkDir:
 		m.Choices["workdir"] = val
 		m.Step = StepOutDir
+		m.initInput()
 	case StepOutDir:
 		m.Choices["outdir"] = val
 		m.Step = StepJobs
@@ -360,7 +333,6 @@ func (m *Model) commitInput() {
 		m.Step = StepConfirm
 		m.Cursor = 0
 	}
-	m.initInput()
 }
 
 func (m Model) buildSummary() string {
@@ -377,8 +349,8 @@ func (m Model) buildSummary() string {
 	if m.Distro != "" {
 		lines = append(lines, fmt.Sprintf("OS:   %s %s", m.Distro, m.Codename))
 	}
-	if v, ok := m.Choices["maintainer_name"]; ok {
-		lines = append(lines, fmt.Sprintf("User: %s", v))
+	if m.Maintainer != "" {
+		lines = append(lines, fmt.Sprintf("Mnt:  %s", m.Maintainer))
 	}
 	if v, ok := m.Choices["outdir"]; ok {
 		lines = append(lines, fmt.Sprintf("Out:  %s", v))
@@ -386,12 +358,12 @@ func (m Model) buildSummary() string {
 	return strings.Join(lines, "\n")
 }
 
-func RunWizard(distro, codename string, releases []string) (map[string]string, bool, error) {
-	p := tea.NewProgram(NewModel(distro, codename, releases), tea.WithAltScreen())
-	m, err := p.Run()
+func RunWizard(distro, codename, maintainer string, releases []string) (map[string]string, bool, error) {
+	p := tea.NewProgram(NewModel(distro, codename, maintainer, releases), tea.WithAltScreen())
+	result, err := p.Run()
 	if err != nil {
 		return nil, false, err
 	}
-	final := m.(Model)
+	final := result.(Model)
 	return final.Choices, final.Confirmed, nil
 }

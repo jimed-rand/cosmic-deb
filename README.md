@@ -1,189 +1,129 @@
 # cosmic-deb
 
-COSMIC Debian Builder or `cosmic-deb`, is a builder tool for creating Debian/Ubuntu packages for COSMIC desktop.
+Build tool for packaging the [COSMIC Desktop Environment](https://system76.com/cosmic) as native Debian/Ubuntu `.deb` packages. Upstream packaging sources are maintained by [hepp3n on Codeberg](https://codeberg.org/hepp3n).
 
-## Abstract
+## Requirements
 
-The `cosmic-deb` initiative represents a sophisticated build orchestration framework, meticulously engineered in the Go programming language to provide a seamless and highly automated pathway for the acquisition, compilation, and subsequent packaging of the COSMIC™ Desktop Environment into standardised Debian binary archives (`.deb`). In the contemporary landscape of open-source software development, the transition of modern, Rust-based source implementations into the rigorous packaging hierarchies required by the Debian and Ubuntu ecosystems involves a multifaceted interplay of complex dependency resolution, toolchain synchronisation, and meticulous metadata management. This framework serves as a critical systemic bridge, abstracting these inherent complexities through a robust architectural design that prioritises systemic build integrity, distribution-specific compatibility, and operational efficiency, thereby allowing users and developers to bypass the traditional manual barriers associated with high-level environment synthesis.
+- Debian bookworm (12) or later, or Ubuntu jammy (22.04) or later
+- `apt-get`, `git`, `curl`, `fakeroot`, `dpkg-dev`
+- Go 1.24 or later (to build the orchestrator itself)
 
-Central to the operational efficacy of this orchestration utility is its strategic and seamless integration with the verified community-led repository forks, specifically those curated by the developer hepp3n on the Codeberg platform, which provide the essential `debian/` administrative structures necessary for professional-grade packaging. These repositories are distinguished by their inclusion of detailed metadata—encompassing control files, build rules, and properly formatted changelogs—that define the exact build-time and runtime requirements for each modular component of the COSMIC™ suite, ranging from core session managers to high-level system configurations. The logic embedded within `cosmic-deb` dynamically identifies the appropriate build systems—be it Just, Make, or Cargo—and executes release-grade optimisations while simultaneously automating the procurement of intricate dependencies, utilising high-performance technologies such as the `mold` linker to significantly reduce the temporal latency typically associated with large-scale compilation tasks.
+## Build the orchestrator
 
-Furthermore, the `cosmic-deb` project is underpinned by a profound commitment to the philosophical principles of open-source collaboration and proactive intellectual property stewardship, ensuring that the synthesis process remains entirely transparent and respectful of the original authors' work. While the orchestrator itself is distributed under the GNU General Public License v2.0, it operates in total alignment with the licensing regimes of the upstream COSMIC™ components developed by System76 and the packaging efforts of the wider community, preserving all original metadata and legal markers throughout the build lifecycle. Ultimately, this framework is envisioned as a scholarly and technical endeavour to democratise access to the next generation of memory-safe desktop environments, providing a robust, academically grounded, and fully automated methodology that empowers the global Linux community to experience the future of desktop computing on their preferred APT-based distributions while adhering to the highest standards of software engineering and collaborative development.
-
-## Systemic Requirements and Distribution Compatibility
-
-The efficacy of this framework is contingent upon its deployment within an APT-based Linux distribution. Current support is prioritised for modern Debian releases and Ubuntu Long Term Support (LTS) or development cycles, ensuring a stable yet forward-looking environment for the COSMIC™ ecosystem.
-
-| Distribution | Supported Release Iterations |
-|:---|:---|
-| **Debian GNU/Linux** | Version 12 (Bookworm) and subsequent stable/testing branches (Trixie, Forky, Sid). |
-| **Ubuntu Linux** | LTS releases (22.04 Jammy, 24.04 Noble, 26.04 Resolute) and development branch (devel). |
-
-*Note: Package availability is resolved at runtime per detected codename; only LTS and devel releases are supported.*
-
-## Distro-Aware Dependency Resolution
-
-Build dependencies are resolved dynamically at runtime based on the detected distribution and release codename. This ensures that packages installed are appropriate for the host system and avoids conflicts caused by package naming differences or availability gaps across releases.
-
-The following table summarises per-release dependency behaviour, verified against packages.debian.org and packages.ubuntu.com:
-
-| Package | Debian Bookworm | Debian Trixie/Forky/Sid | Ubuntu Jammy | Ubuntu Noble/Resolute |
-|:---|:---:|:---:|:---:|:---:|
-| `libdisplay-info-dev` | No | Yes | No | Yes |
-| `rust-all` | Yes | Yes | Yes | Yes |
-| `dh-cargo` | Yes | Yes | Yes | Yes |
-| `just` (via apt) | No | Yes | No | No |
-
-When `just` is not available through APT (Debian Bookworm, all Ubuntu releases), `cosmic-deb` automatically installs it via `cargo install just` after the toolchain setup phase. The `libdisplay-info-dev` package is conditionally added to the build dependency set for both global and per-component (`cosmic-comp`, `cosmic-settings`) resolution only on releases where it is available in the official repositories. All other conditional packages (`rust-all`, `dh-cargo`) are available across all supported Debian and Ubuntu releases and are included unconditionally per distro family.
-
-## Methodological Compilation
-
-Prior to the execution of the build process, the host system must be equipped with the Go toolchain (version 1.21 or later). The compilation of the `cosmic-deb` binary is achieved through a standardised `Makefile` procedure, which encapsulates the necessary build directives:
-
-```bash
+```sh
 make build
 ```
 
-## Source Mode Selection
+## Usage
 
-`cosmic-deb` supports two distinct source acquisition strategies, selectable at runtime via both the interactive CLI prompt and the TUI wizard:
+### Interactive (CLI)
 
-**Default Branch (Recommended)** — Clones or downloads the current HEAD of each repository's default branch (typically `master` for hepp3n's Codeberg forks). This mode tracks the latest packaging state including the `debian/` directory metadata, and is the recommended approach since hepp3n manages versioning through `debian/changelog` on the primary branch rather than through git tags. The version number is extracted dynamically from the `debian/changelog` file at build time.
-
-**Epoch Tag** — Checks out a specific, versioned release tag (e.g., `epoch-1.0.0`) from each repository. This is the reproducible option and is appropriate when a known-good baseline is required. Available tags are discovered dynamically from the upstream repositories via `git ls-remote` without any hardcoded version references.
-
-The source mode can also be forced non-interactively via the `-use-branch` flag:
-
-```bash
-./cosmic-deb -use-branch
-```
-
-## Configuration and Metadata Integration
-
-A distinguishing feature of this utility is the encapsulation of repository metadata directly within the binary via `finder.go`. This design decision minimises external file dependencies, thereby enhancing the portability and integrity of the build process. The metadata points exclusively to verified Codeberg forks maintained by hepp3n, which contain the essential `debian/` directory structures (including `control`, `rules`, and `changelog` files) required for native Debianisation. No version information is hardcoded; all tags and versions are resolved dynamically at runtime from the upstream repositories.
-
-To synchronise the embedded configuration with the latest upstream epoch tags, the following command should be executed periodically:
-
-```bash
-./cosmic-deb -update-repos
-```
-
-## Source Distribution Rationale
-
-The decision to utilise hepp3n's Codeberg forks over the primary System76 GitHub repositories is rooted in the necessity for standardised Debian packaging logic. These forks integrate critical metadata that governs:
-
-*   **Dependency Resolution**: Detailed Build-Depends and runtime Depends within `debian/control`.
-*   **Build Directives**: Customised build instructions in `debian/rules` that utilise the `just` automation tool for vendoring and compilation.
-*   **Version Tracking**: Properly formatted Debian changelogs to ensure seamless upgrades across various APT repositories.
-
-Where a `debian/` directory is identified, `cosmic-deb` invokes the `dpkg-buildpackage` suite for a native packaging experience. In instances where such metadata is absent, the tool reverts to a manual compilation and packaging fallback to ensure continuity.
-
-## Operational Procedure
-
-### Comprehensive Environment Synthesis
-
-The `cosmic-deb` orchestrator is designed to operate within a standard user environment, necessitating elevated privileges only for the installation of systemic dependencies. By executing the utility as a non-privileged user, the resulting compilation artifacts and source repositories remain owned by the current user, thereby ensuring a cleaner and more secure build lifecycle. The orchestrator will proactively prompt for a `sudo` password when systemic modifications are required.
-
-Execution of the orchestrator is initiated as follows:
-
-```bash
+```sh
 ./cosmic-deb
 ```
 
-Upon launch, the interactive prompt will ask you to select a source mode. Enter `b` to build from the main branch HEAD, or select a numbered epoch tag from the list:
+You will be prompted to select a source mode (epoch tag or main branch HEAD). Build dependencies are checked first; only missing packages will be installed (using `sudo` if not root). The maintainer field in generated packages is automatically set to credit **hepp3n** as the upstream packaging author.
 
-```
-Select source mode:
-  [b] Latest (main branch HEAD)
-  [0] epoch-1.0.7
-  [*] Use per-repo tags from repos config
-Select option (b / index / Enter for per-repo tags):
-```
+Packages are named with the distro codename to prevent version collisions across releases, e.g. `cosmic-comp_1.0.0~noble_amd64.deb`.
 
-### Advanced Execution Parameters
+After all components are built, source and staging directories are cleaned up automatically. You will then be offered the option to install the packages locally. Container environments (Docker, LXC, etc.) are detected and the install offer is skipped automatically.
 
-The behaviour of `cosmic-deb` can be modified through several command-line flags, allowing for granular control over the build environment.
+### Interactive (TUI)
 
-| Parameter | Default Value | Technical Description |
-|:---|:---|:---|
-| `-repos` | `built-in` | Specifies an alternative path for repository configuration. |
-| `-update-repos` | `false` | Triggers a metadata update of epoch tags followed by immediate termination. |
-| `-tag` | *(null)* | Enforces a specific version tag across all managed repositories. |
-| `-use-branch` | `false` | Build from main branch HEAD instead of epoch tags. |
-| `-workdir` | `cosmic-work` | Designates the directory for source retrieval and compilation. |
-| `-outdir` | `cosmic-packages` | Output location for the resulting `.deb` binary packages. |
-| `-jobs` | *CPU Count* | Determines the level of parallelism during the compilation phase. |
-| `-skip-deps` | `false` | Bypasses the automated installation of requisite build dependencies. |
-| `-only` | *(null)* | Isolates the build process to a singular named component. |
-| `-tui` | `false` | Initialises an interactive Terminal User Interface (TUI) wizard. |
-
-## Deployment and Removal
-
-### Installation Strategy
-
-Once the compilation has concluded successfully, the generated packages should be installed using the `dpkg` utility, followed by an APT resolution pass to ensure all runtime dependencies are met:
-
-```bash
-sudo dpkg -i cosmic-packages/cosmic-desktop_*.deb
-sudo apt-get install -f
+```sh
+./cosmic-deb -tui
 ```
 
-For a more streamlined experience, a local installation script is provided:
+A full-screen wizard guides you through source mode selection, output paths, parallelism, and dependency handling. A live build monitor is shown during compilation.
 
-```bash
-sudo bash scripts/install-local.sh cosmic-packages
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-tui` | false | Launch TUI wizard instead of CLI prompts |
+| `-repos` | `built-in` | Path to repos JSON config, or `built-in` |
+| `-tag` | _(none)_ | Override epoch tag for all repos |
+| `-use-branch` | false | Build from main branch HEAD |
+| `-workdir` | `cosmic-work` | Directory for source and staging files |
+| `-outdir` | `cosmic-packages` | Directory for output `.deb` files |
+| `-jobs` | _(nproc)_ | Parallel compilation jobs |
+| `-skip-deps` | false | Skip dependency installation check |
+| `-only` | _(none)_ | Build a single named component |
+| `-update-repos` | false | Fetch latest epoch tags and write `repos.json` |
+| `-gen-config` | false | Write built-in config to `repos.json` |
+| `-dev-finder` | false | Regenerate `pkg/repos/finder.go` from current config |
+
+### Makefile targets
+
+```sh
+make run                    # Full pipeline, interactive source selection
+make run-tui                # Full pipeline with TUI wizard
+make run-branch             # Build from main branch HEAD
+make run-only COMPONENT=cosmic-term
+make run-skip-deps          # Skip dep check (assumes deps already installed)
+make update-repos           # Fetch latest epoch tags
+make install                # Install binary and scripts to /usr/local
+make uninstall              # Remove installation
+make clean                  # Remove binary and output directory
 ```
 
-### System Restoration
+## Source mode
 
-To purge the COSMIC™ components from the host system, the provided uninstallation script should be utilised:
+**Epoch tags** correspond to versioned COSMIC releases (e.g. `epoch-1.0.0`). Each repository may carry its own tag, or you may apply a single tag globally with `-tag`.
 
-```bash
-sudo bash scripts/uninstall.sh
+**Branch HEAD** builds the latest untagged commit from each repository's default branch. This may be unstable.
+
+## Build procedure
+
+1. Dependency check — missing APT packages are installed (sudo only if required). Rust toolchain and `just` are ensured.
+2. Build order — all components are sorted A–Z before any compilation begins, preventing partial-build confusion.
+3. For each component: source is downloaded (tarball first, git clone fallback), vendored if a justfile vendor target is present, compiled, and build output is validated before staging.
+4. Packaging — a `DEBIAN/control` is generated, runtime dependencies are declared, and `fakeroot dpkg-deb` assembles the `.deb`. Package filenames include the distro codename.
+5. Meta package — `cosmic-desktop` is assembled as a convenience dependency on all built components.
+6. Cleanup — source trees and staging directories are removed after all packages are assembled.
+7. Local install offer — if not running inside a container, you are asked whether to install the packages immediately.
+
+## Installation scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/install-local.sh [dir]` | Install locally built packages from a directory |
+| `scripts/install-release.sh [tag]` | Download and install a GitHub release |
+| `scripts/uninstall.sh` | Remove all COSMIC packages |
+
+## Package structure
+
+```
+cosmic-deb/
+├── main.go                    # Orchestrator entry point
+├── exec.go                    # Shell exec helpers
+├── go.mod / go.sum
+├── Makefile
+├── README.md
+├── pkg/
+│   ├── build/
+│   │   ├── compile.go         # Compilation, vendor, staging install
+│   │   ├── deps.go            # Dependency installation and Rust toolchain
+│   │   ├── source.go          # Source download and git clone
+│   │   └── version.go         # Version detection
+│   ├── debian/
+│   │   └── package.go         # .deb assembly and meta package
+│   ├── distro/
+│   │   ├── deps.go            # Per-distro build dependency resolution
+│   │   └── detect.go          # Distro detection, support check, container detection
+│   ├── repos/
+│   │   ├── finder.go          # Built-in repo list (hepp3n/Codeberg)
+│   │   ├── loader.go          # Config loading, epoch tag queries, update
+│   │   └── types.go           # Repo entry and config types
+│   └── tui/
+│       ├── monitor.go         # Live build monitor
+│       └── wizard.go          # Configuration wizard
+└── scripts/
+    ├── install-local.sh
+    ├── install-release.sh
+    └── uninstall.sh
 ```
 
-## Technical Architecture and Dependency Mapping
+## Credits
 
-The framework maintains a comprehensive mapping of both build-time and runtime requirements, derived through rigorous analysis of upstream metadata. The following table highlights critical dependencies for primary components:
-
-| Component | Essential Runtime Dependencies |
-|:---|:---|
-| `cosmic-session` | Core COSMIC packages, `gnome-keyring`, `xwayland`, `fonts-open-sans`. |
-| `cosmic-comp` | `libegl1`, `libwayland-server0`, and associated Wayland drivers. |
-| `cosmic-greeter` | `greetd`, `adduser`, `cosmic-comp`, `dbus`. |
-| `cosmic-settings` | `accountsservice`, `iso-codes`, `network-manager-gnome`. |
-| `cosmic-launcher` | `pop-launcher` and its associated plugins. |
-| `cosmic-player` | `gstreamer1.0-plugins-base`, `gstreamer1.0-plugins-good`. |
-| `pop-launcher` | `qalc` (calculator integration), `fd-find`. |
-
-## Procedural Sophistication
-
-The orchestration logic prioritises high-performance retrieval via source archives, with a secondary fallback to shallow Git cloning mechanisms. Build system identification is automated, recognising `Justfiles`, `Makefiles`, and `Cargo.toml` configurations to apply appropriate release-grade optimisations.
-
-The build environment is further enhanced by the integration of the `mold` linker and `nasm` assembler where applicable, significantly reducing compilation latency. Rust stability is ensured through automated `rustup` configurations, maintaining a consistent toolchain version across the entirety of the COSMIC™ suite.
-
-## Legal and Ethical Framework
-
-### Licensing Provisions
-
-`cosmic-deb` is distributed under the terms of the **GNU General Public License v2.0 (GPL-2.0)**. The comprehensive text of this license is available within the `LICENSE` file of this repository.
-
-It is imperative to note that the upstream COSMIC™ components and the associated Debian packaging sources retrieved during the execution phase are governed by their respective licenses (predominantly **GPL-3.0**). This framework is designed to operate in total alignment with these legal requirements, ensuring that original metadata and license markers are preserved throughout the packaging lifecycle.
-
-### Intellectual Property Statement
-
-This project represents an independent academic and technical endeavour aimed at broadening the accessibility of the COSMIC™ Desktop Environment.
-
-*   **Honouring Original Authorship**: We hold the innovative work of the **System76 / Pop!_OS team** in the highest esteem. Their pioneering efforts in developing a modern, memory-safe desktop environment are the fundamental motivation for this project.
-*   **Acknowledgement of Fork Maintainers**: We express our profound gratitude to **hepp3n (Piotr)** for his meticulous maintenance of the Debian packaging forks. His contributions are the cornerstone upon which this automated orchestrator is built.
-*   **Community Objectives**: `cosmic-deb` is envisioned as a contribution to the global Linux community, providing a robust mechanism for enthusiasts and developers to experience and test the next generation of desktop computing on their preferred APT-based platforms.
-
-## Acknowledgements
-
-*   **System76 / Pop!_OS Team**: The primary architects and visionaries of the COSMIC™ Desktop Environment.
-*   **hepp3n (Piotr)**: For the dedicated provision of Debian/Ubuntu-compatible packaging infrastructure.
-*   **James Ed Randson (jimed-rand)**: Lead developer and maintainer of the `cosmic-deb` framework.
-*   **The Global Open Source Collective**: For the continuous advancement of the technologies that make this utility possible.
-
----
-*COSMIC™ is a registered trademark of System76. This project is developed independently and does not imply endorsement by, or affiliation with, System76.*
+Upstream Debian packaging maintained by **hepp3n** — [codeberg.org/hepp3n](https://codeberg.org/hepp3n).

@@ -2,33 +2,12 @@
 set -e
 
 COSMIC_PACKAGES=(
-    cosmic-app-library
-    cosmic-applets
-    cosmic-bg
-    cosmic-comp
-    cosmic-desktop
-    cosmic-edit
-    cosmic-files
-    cosmic-greeter
-    cosmic-icons
-    cosmic-idle
-    cosmic-initial-setup
-    cosmic-launcher
-    cosmic-notifications
-    cosmic-osd
-    cosmic-panel
-    cosmic-player
-    cosmic-randr
-    cosmic-screenshot
-    cosmic-session
-    cosmic-settings
-    cosmic-settings-daemon
-    cosmic-store
-    cosmic-term
-    cosmic-wallpapers
-    cosmic-workspaces
-    pop-launcher
-    xdg-desktop-portal-cosmic
+    cosmic-app-library cosmic-applets cosmic-bg cosmic-comp cosmic-desktop
+    cosmic-edit cosmic-files cosmic-greeter cosmic-icons cosmic-idle
+    cosmic-initial-setup cosmic-launcher cosmic-notifications cosmic-osd
+    cosmic-panel cosmic-player cosmic-randr cosmic-screenshot cosmic-session
+    cosmic-settings cosmic-settings-daemon cosmic-store cosmic-term
+    cosmic-wallpapers cosmic-workspaces pop-launcher xdg-desktop-portal-cosmic
 )
 
 check_apt() {
@@ -61,8 +40,8 @@ for pkg in "${COSMIC_PACKAGES[@]}"; do
     fi
 done
 
-if [ ${#INSTALLED[@]} -eq 0 ]; then
-    echo "No installed COSMIC packages were found on this system."
+if [ "${#INSTALLED[@]}" -eq 0 ]; then
+    echo "No installed COSMIC packages found."
     exit 0
 fi
 
@@ -74,5 +53,5 @@ if command -v systemctl > /dev/null 2>&1; then
     systemctl daemon-reload || true
 fi
 
-echo "COSMIC Desktop Environment has been successfully removed."
-echo "A system restart or display manager restart may be required to complete the process."
+echo "COSMIC Desktop Environment successfully removed."
+echo "A display manager restart or reboot may be required."

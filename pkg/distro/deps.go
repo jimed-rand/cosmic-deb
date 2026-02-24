@@ -1,7 +1,7 @@
-package main
+package distro
 
-func hasDisplayInfoDev(distroID, codename string) bool {
-	switch distroID {
+func HasDisplayInfoDev(id, codename string) bool {
+	switch id {
 	case "debian":
 		switch codename {
 		case "trixie", "forky", "sid", "unstable", "testing":
@@ -16,8 +16,8 @@ func hasDisplayInfoDev(distroID, codename string) bool {
 	return false
 }
 
-func hasRustAll(distroID, codename string) bool {
-	switch distroID {
+func HasRustAll(id, codename string) bool {
+	switch id {
 	case "debian":
 		return true
 	case "ubuntu":
@@ -29,8 +29,8 @@ func hasRustAll(distroID, codename string) bool {
 	return false
 }
 
-func hasDhCargo(distroID, codename string) bool {
-	switch distroID {
+func HasDhCargo(id, codename string) bool {
+	switch id {
 	case "debian":
 		return true
 	case "ubuntu":
@@ -42,9 +42,8 @@ func hasDhCargo(distroID, codename string) bool {
 	return false
 }
 
-func hasJustInApt(distroID, codename string) bool {
-	switch distroID {
-	case "debian":
+func HasJustInApt(id, codename string) bool {
+	if id == "debian" {
 		switch codename {
 		case "trixie", "forky", "sid", "unstable", "testing":
 			return true
@@ -53,90 +52,44 @@ func hasJustInApt(distroID, codename string) bool {
 	return false
 }
 
-func resolveGlobalBuildDeps(distroID, codename string) []string {
+func GlobalBuildDeps(id, codename string) []string {
 	deps := []string{
-		"build-essential",
-		"cargo",
-		"clang",
-		"cmake",
-		"curl",
-		"debhelper",
-		"desktop-file-utils",
-		"devscripts",
-		"git",
-		"imagemagick",
-		"intltool",
-		"iso-codes",
-		"libclang-dev",
-		"libdbus-1-dev",
-		"libegl-dev",
-		"libegl1-mesa-dev",
-		"libexpat1-dev",
-		"libflatpak-dev",
-		"libfontconfig-dev",
-		"libfreetype-dev",
-		"libgbm-dev",
-		"libglib2.0-dev",
-		"libgstreamer-plugins-base1.0-dev",
-		"libgstreamer1.0-dev",
-		"libinput-dev",
-		"libnm-dev",
-		"libpam0g-dev",
-		"libpipewire-0.3-dev",
-		"libpixman-1-dev",
-		"libpulse-dev",
-		"libseat-dev",
-		"libssl-dev",
-		"libsystemd-dev",
-		"libudev-dev",
-		"libwayland-dev",
-		"libxcb-render0-dev",
-		"libxcb-shape0-dev",
-		"libxcb-xfixes0-dev",
-		"libxcb1-dev",
-		"libxkbcommon-dev",
-		"lld",
-		"mold",
-		"nasm",
-		"pkg-config",
-		"rustc",
-		"fakeroot",
-		"ninja-build",
-		"meson",
-		"sassc",
-		"quilt",
-		"libfile-fcntllock-perl",
-		"dh-make",
-		"dpkg-dev",
-		"libglib2.0-dev-bin",
-		"libwayland-bin",
-		"libxml2-utils",
-		"libglib2.0-bin",
-		"gettext",
-		"itstool",
-		"wayland-protocols",
-		"libgdk-pixbuf-2.0-dev",
-		"dh-exec",
+		"build-essential", "cargo", "clang", "cmake", "curl",
+		"debhelper", "desktop-file-utils", "devscripts", "git",
+		"imagemagick", "intltool", "iso-codes", "libclang-dev",
+		"libdbus-1-dev", "libegl-dev", "libegl1-mesa-dev",
+		"libexpat1-dev", "libflatpak-dev", "libfontconfig-dev",
+		"libfreetype-dev", "libgbm-dev", "libglib2.0-dev",
+		"libgstreamer-plugins-base1.0-dev", "libgstreamer1.0-dev",
+		"libinput-dev", "libnm-dev", "libpam0g-dev",
+		"libpipewire-0.3-dev", "libpixman-1-dev", "libpulse-dev",
+		"libseat-dev", "libssl-dev", "libsystemd-dev", "libudev-dev",
+		"libwayland-dev", "libxcb-render0-dev", "libxcb-shape0-dev",
+		"libxcb-xfixes0-dev", "libxcb1-dev", "libxkbcommon-dev",
+		"lld", "mold", "nasm", "pkg-config", "rustc", "fakeroot",
+		"ninja-build", "meson", "sassc", "quilt",
+		"libfile-fcntllock-perl", "dh-make", "dpkg-dev",
+		"libglib2.0-dev-bin", "libwayland-bin", "libxml2-utils",
+		"libglib2.0-bin", "gettext", "itstool", "wayland-protocols",
+		"libgdk-pixbuf-2.0-dev", "dh-exec",
 	}
-
-	if hasDisplayInfoDev(distroID, codename) {
+	if HasDisplayInfoDev(id, codename) {
 		deps = append(deps, "libdisplay-info-dev")
 	}
-	if hasRustAll(distroID, codename) {
+	if HasRustAll(id, codename) {
 		deps = append(deps, "rust-all")
 	}
-	if hasDhCargo(distroID, codename) {
+	if HasDhCargo(id, codename) {
 		deps = append(deps, "dh-cargo")
 	}
-	if hasJustInApt(distroID, codename) {
+	if HasJustInApt(id, codename) {
 		deps = append(deps, "just")
 	}
-
 	return deps
 }
 
-func resolvePerComponentBuildDeps(distroID, codename string) map[string][]string {
-	displayInfo := hasDisplayInfoDev(distroID, codename)
+func PerComponentBuildDeps(id, codename string) map[string][]string {
+	displayInfo := HasDisplayInfoDev(id, codename)
 
 	cosmicComp := []string{
 		"cargo", "cmake", "debhelper", "libegl1-mesa-dev",
@@ -265,4 +218,24 @@ func resolvePerComponentBuildDeps(distroID, codename string) map[string][]string
 			"libxkbcommon-dev", "pkg-config",
 		},
 	}
+}
+
+func CollectAllBuildDeps(id, codename string) []string {
+	seen := make(map[string]bool)
+	var result []string
+	for _, dep := range GlobalBuildDeps(id, codename) {
+		if !seen[dep] {
+			seen[dep] = true
+			result = append(result, dep)
+		}
+	}
+	for _, deps := range PerComponentBuildDeps(id, codename) {
+		for _, dep := range deps {
+			if !seen[dep] {
+				seen[dep] = true
+				result = append(result, dep)
+			}
+		}
+	}
+	return result
 }

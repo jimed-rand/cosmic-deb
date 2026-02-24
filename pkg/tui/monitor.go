@@ -90,7 +90,6 @@ func (m MonitorModel) View() string {
 
 	filled := int(float64(progWidth) * percent)
 	empty := progWidth - filled
-
 	bar := "[" + progressStyle.Render(strings.Repeat("█", filled)) + strings.Repeat(" ", empty) + "]"
 	progressLine := fmt.Sprintf("%s %d/%d - %s", bar, m.CurrentStep, m.TotalSteps, m.StepName)
 
@@ -111,17 +110,13 @@ func (m MonitorModel) View() string {
 		}
 		logLines = append(logLines, "  "+line)
 	}
-	logContent := strings.Join(logLines, "\n")
 
 	view := lipgloss.JoinVertical(lipgloss.Left,
-		header,
-		"",
+		header, "",
 		sectionTitle.Render("Build Progress:"),
-		progressLine,
-		"",
+		progressLine, "",
 		sectionTitle.Render("Activity Log:"),
-		logContent,
-		"",
+		strings.Join(logLines, "\n"), "",
 		"Press Ctrl+C to abort",
 	)
 

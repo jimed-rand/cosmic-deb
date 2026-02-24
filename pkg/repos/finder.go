@@ -1,10 +1,10 @@
-package main
+package repos
 
-func getFinderRepos() *ReposConfig {
-	return &ReposConfig{
+func BuiltIn() *Config {
+	return &Config{
 		GeneratedAt: "2026-02-23",
 		EpochLatest: "",
-		Repos: []RepoEntry{
+		Repos: []Entry{
 			{Name: "cosmic-app-library", URL: "https://codeberg.org/hepp3n/cosmic-applibrary", Branch: "master"},
 			{Name: "cosmic-applets", URL: "https://codeberg.org/hepp3n/cosmic-applets", Branch: "master"},
 			{Name: "cosmic-bg", URL: "https://codeberg.org/hepp3n/cosmic-bg", Branch: "master"},
@@ -33,4 +33,8 @@ func getFinderRepos() *ReposConfig {
 			{Name: "xdg-desktop-portal-cosmic", URL: "https://codeberg.org/hepp3n/xdg-desktop-portal-cosmic", Branch: "master"},
 		},
 	}
+}
+
+func MaintainerFromUpstream() (string, string) {
+	return "hepp3n", "hepp3n@codeberg.org"
 }
