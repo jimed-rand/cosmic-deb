@@ -79,7 +79,7 @@ func Compile(repoDir, repoName string, jobs int, logFn func(string, ...any)) err
 			fmt.Sprintf("--jobs=%d", jobs),
 		)
 	}
-	return fmt.Errorf("no recognised build system in %s", repoDir)
+	return fmt.Errorf("No recognised build system in %s", repoDir)
 }
 
 func ValidateBuildOutput(repoDir string) bool {
@@ -117,7 +117,7 @@ func InstallToStage(repoDir, stageDir string) error {
 			"install",
 		)
 	}
-	return fmt.Errorf("no install target found in %s", repoDir)
+	return fmt.Errorf("No install target found in %s", repoDir)
 }
 
 func BuildWithDebianDir(repoDir, outDir string, logFn func(string, ...any)) error {
@@ -136,7 +136,7 @@ func BuildWithDebianDir(repoDir, outDir string, logFn func(string, ...any)) erro
 			oldPath := filepath.Join(parent, f.Name())
 			newPath := filepath.Join(outDir, f.Name())
 			if err := os.Rename(oldPath, newPath); err != nil {
-				logFn("Warning: failed to move .deb to output directory: %v", err)
+				logFn("Warning: Failed to move .deb to output directory: %v", err)
 			}
 		}
 	}

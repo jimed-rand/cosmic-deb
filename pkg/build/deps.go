@@ -36,7 +36,7 @@ func CheckPackagesInstalled(pkgs []string) (missing []string) {
 	for _, pkg := range pkgs {
 		cmd := exec.Command("dpkg-query", "-W", "-f=${Status}", pkg)
 		out, err := cmd.Output()
-		if err != nil || !strings.Contains(string(out), "install ok installed") {
+		if err != nil || !strings.Contains(string(out), "Installed") {
 			missing = append(missing, pkg)
 		}
 	}
@@ -57,7 +57,7 @@ func InstallPackages(pkgs []string, logFn func(string, ...any)) error {
 func EnsureRustToolchain(logFn func(string, ...any)) error {
 	EnsureCargoBinInPath()
 	if _, err := exec.LookPath("rustup"); err != nil {
-		logFn("rustup not found; installing via sh.rustup.rs")
+		logFn("The rustup binary was not found in PATH; Installing via sh.rustup.rs")
 		if err := runCmd("", "sh", "-c", "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"); err != nil {
 			return err
 		}
@@ -74,7 +74,7 @@ func EnsureRustToolchain(logFn func(string, ...any)) error {
 func EnsureJust(logFn func(string, ...any)) error {
 	EnsureCargoBinInPath()
 	if _, err := exec.LookPath("just"); err != nil {
-		logFn("'just' not found in PATH; installing via cargo")
+		logFn("The 'just' binary was not found in PATH; installing via cargo")
 		if err := runCmd("", "cargo", "install", "just"); err != nil {
 			return err
 		}
