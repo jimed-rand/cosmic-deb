@@ -111,3 +111,10 @@ func DownloadSource(workDir string, repo repos.Entry, tag string, logFn func(str
 	_ = os.Remove(tarPath)
 	return dest
 }
+
+func CleanSource(repoDir, stageDir string, logFn func(string, ...any)) {
+	logFn("Cleaning up source directory: %s", repoDir)
+	os.RemoveAll(repoDir)
+	logFn("Cleaning up staging directory: %s", stageDir)
+	os.RemoveAll(stageDir)
+}

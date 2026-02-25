@@ -6,7 +6,7 @@ This repository presents a comprehensive build automation tool, meticulously des
 
 The software addresses the inherent complexities of cross-distribution package management by automating the retrieval, compilation, and assembly phases of the software development life cycle. By facilitating an interactive build mechanism, it significantly reduces the cognitive load on developers and system administrators. The tool dynamically resolves build dependencies, adapts to systemic containerised environments, and guarantees that the resulting compiled binaries adhere to rigorous structural paradigms. The methodology employed herein guarantees stability, mitigates dependency conflicts, and optimises the dissemination of the COSMIC Desktop Environment.
 
-Furthermore, this utility incorporates advanced logic to ascertain the current state of the host system, employing native queries such as `dpkg-query` to rigorously analyse package statuses. This ensures that redundant operations are minimised and that the build environment remains pristine. The implementation leverages concurrent processing to maximise computational efficiency during the build phase, demonstrating an optimal utilisation of available hardware resources. Through this systematic approach, the build framework provides an academic and robust solution for the seamless distribution of contemporary desktop computing environments within the Linux ecosystem.
+Furthermore, this utility incorporates advanced logic to ascertain the current state of the host system, employing native queries such as `dpkg-query` to rigorously analyse package statuses. This ensures that redundant operations are minimised and that the build environment remains pristine. The Rust toolchain is provisioned through an isolated `rustup` installation scoped entirely within the working directory, meaning `cargo`, `rustc`, and associated binaries are never installed system-wide and are purged automatically once the build completes or fails. Source trees for each component are likewise deleted immediately after their `.deb` package is assembled, preventing accumulation of large intermediate artefacts on disk. Through this systematic approach, the build framework provides an academic and robust solution for the seamless distribution of contemporary desktop computing environments within the Linux ecosystem.
 
 ## Prerequisites
 
@@ -15,6 +15,7 @@ To ensure the successful execution of the build process, the host system must sa
 - **Operating System:** Debian 12 (Bookworm) or a subsequent release, or alternatively, Ubuntu 22.04 (Jammy Jellyfish) or a subsequent LTS release. Also applied with the Developmental branch of Ubuntu (`devel`). **Note:** Non-LTS iterations of Ubuntu are explicitly unsupported due to their ephemeral lifecycle and inherent unsuitability for stable deployment environments.
 - **Core Utilities:** The presence of `apt-get`, `git`, `curl`, `fakeroot`, and `dpkg-dev` is mandatory for dependency resolution and package assembly.
 - **Compiler:** Go version 1.24 or later is requisite for the initial compilation of the builder itself.
+- **Rust Toolchain:** The builder provisions Rust automatically via `rustup` into an isolated directory inside the working directory. No system-wide Rust installation is required or modified.
 
 ## Compilation of the Builder
 
@@ -23,6 +24,14 @@ The initialisation phase requires the compilation of the Go-based build framewor
 ```sh
 make build
 ```
+
+## Isolated Rust Environment
+
+Rather than relying on APT-packaged Rust (`rustc`, `cargo`, `rust-all`, `dh-cargo`), the builder provisions a fully isolated Rust toolchain via `rustup` scoped to the working directory. Specifically, `CARGO_HOME` and `RUSTUP_HOME` are redirected to `<workdir>/.cargo-isolated` and `<workdir>/.rustup-isolated` respectively, and the isolated `bin/` directory is prepended to `PATH` exclusively for the duration of the build. Upon completion or failure, both directories are removed automatically by a deferred cleanup routine in the orchestrator. This means no Rust artefacts — toolchains, registries, caches, or compiled crates — persist on the host after the build finishes.
+
+## Per-Component Source Cleanup
+
+Each component's source tree and staging directory are deleted immediately after its `.deb` package has been assembled (or after a failure to compile or stage). This prevents the cumulative disk usage that would otherwise result from retaining all sources concurrently throughout a full build run. The working directory therefore contains at most one component's source at any given moment during the pipeline.
 
 ## Operational Methodology
 
@@ -99,13 +108,15 @@ make clean                  # Purges the designated working directories and comp
 
 ## Build Procedure Framework
 
-1. **Dependency Validation:** The builder evaluates the system for missing APT packages and undertakes installation (invoking `sudo` conditionally). The integration of the Rust toolchain and the `just` command runner is strictly enforced.
-2. **Sequential Ordering:** Prior to compilation, components are subjected to a structural A–Z sortation, thereby mitigating potential discrepancies arising from unpredictable build sequences.
-3. **Component Processing:** For each designated component, the source material is acquired (prioritising tarball extraction with a fallback to `git clone`). If a `justfile` vendor target is detected, dependencies are vendored, followed by systematic compilation and output validation prior to the staging phase.
-4. **Package Assembly:** A standardised `DEBIAN/control` manifest is generated, enumerating necessary runtime dependencies. Subsequently, the `fakeroot dpkg-deb` utility executes the synthesis of the `.deb` archive. Appended filenames rigorously reflect the host distribution's codename.
-5. **Meta-package Synthesis:** The `cosmic-desktop` meta-package is algorithmically constructed to serve as an aggregate dependency linking all independently built components, simplifying holistic installation.
-6. **Data Sanitisation:** Upon the successful amalgamation of all packages, the system instigates an exhaustive cleanup procedure, removing transient source hierarchies and staging constructs.
-7. **Deployment Resolution:** Provided the process operates outside a constrained containerised environment, the builder consults the operator regarding the immediate system-wide deployment of the synthesised packages.
+1. **Dependency Validation:** The builder evaluates the system for missing APT packages (C/C++ toolchain, development headers, packaging utilities) and undertakes installation (invoking `sudo` conditionally). Rust-specific APT packages (`rustc`, `cargo`, `rust-all`, `dh-cargo`) are intentionally excluded; the Rust toolchain is provisioned exclusively via `rustup` in the isolated environment.
+2. **Rust Isolation:** `rustup` is installed into `<workdir>/.cargo-isolated` and `<workdir>/.rustup-isolated`. The stable toolchain and `just` command runner are configured within this scope. All `cargo` invocations during compilation use the isolated binary paths.
+3. **Sequential Ordering:** Prior to compilation, components are subjected to a structural A–Z sortation, thereby mitigating potential discrepancies arising from unpredictable build sequences.
+4. **Component Processing:** For each designated component, the source material is acquired (prioritising tarball extraction with a fallback to `git clone`). If a `justfile` vendor target is detected, dependencies are vendored, followed by systematic compilation and output validation prior to the staging phase.
+5. **Package Assembly:** A standardised `DEBIAN/control` manifest is generated, enumerating necessary runtime dependencies. Subsequently, the `fakeroot dpkg-deb` utility executes the synthesis of the `.deb` archive. Appended filenames rigorously reflect the host distribution's codename.
+6. **Per-Component Cleanup:** Immediately after each component's `.deb` is assembled (or after compilation/staging failure), its source tree and staging directory are removed. This bounds peak disk usage to a single component at a time rather than accumulating all sources throughout the pipeline.
+7. **Meta-package Synthesis:** The `cosmic-desktop` meta-package is algorithmically constructed to serve as an aggregate dependency linking all independently built components, simplifying holistic installation.
+8. **Rust Environment Purge:** Upon pipeline completion or failure (via `defer`), the isolated Rust environment directories are removed entirely, leaving no Rust toolchain artefacts on the host system.
+9. **Deployment Resolution:** Provided the process operates outside a constrained containerised environment, the builder consults the operator regarding the immediate system-wide deployment of the synthesised packages.
 
 ## Deployment Scripts
 
@@ -126,13 +137,13 @@ cosmic-deb/
 ├── pkg/
 │   ├── build/
 │   │   ├── compile.go         # Algorithmic compilation, vendoring, and staging installation
-│   │   ├── deps.go            # Evaluative dependency resolution and Rust toolchain provisioning
+│   │   ├── deps.go            # Isolated rustup provisioning and APT dependency resolution
 │   │   ├── source.go          # Data acquisition mechanics via tarball or git version control
 │   │   └── version.go         # Implementation of systemic version detection heuristics
 │   ├── debian/
 │   │   └── package.go         # Mechanisms for .deb synthesis and meta-package construction
 │   ├── distro/
-│   │   ├── deps.go            # Distribution-specific dependency mapping logic
+│   │   ├── deps.go            # Distribution-specific dependency mapping logic (no Rust APT packages)
 │   │   └── detect.go          # Methodologies for distribution identification and container heuristics
 │   ├── repos/
 │   │   ├── finder.go          # Native repository enumeration (hepp3n/Codeberg)

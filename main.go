@@ -21,19 +21,19 @@ import (
 )
 
 var (
-	flagRepos      = flag.String("repos", "built-in", "Path to repos.json or 'built-in'")
-	flagTag        = flag.String("tag", "", "Override epoch tag for all repositories")
-	flagUseBranch  = flag.Bool("use-branch", false, "Build from main branch HEAD instead of epoch tag")
-	flagWorkDir    = flag.String("workdir", "cosmic-work", "Staging directory for source code")
-	flagOutDir     = flag.String("outdir", "cosmic-packages", "Output directory for .deb files")
-	flagJobs       = flag.Int("jobs", 0, "Number of parallel compilation jobs (0 = nproc)")
-	flagSkipDeps   = flag.Bool("skip-deps", false, "Skip build dependency installation")
-	flagOnly       = flag.String("only", "", "Build a single named component")
-	flagTUI        = flag.Bool("tui", false, "Launch the TUI configuration wizard")
+	flagRepos       = flag.String("repos", "built-in", "Path to repos.json or 'built-in'")
+	flagTag         = flag.String("tag", "", "Override epoch tag for all repositories")
+	flagUseBranch   = flag.Bool("use-branch", false, "Build from main branch HEAD instead of epoch tag")
+	flagWorkDir     = flag.String("workdir", "cosmic-work", "Staging directory for source code")
+	flagOutDir      = flag.String("outdir", "cosmic-packages", "Output directory for .deb files")
+	flagJobs        = flag.Int("jobs", 0, "Number of parallel compilation jobs (0 = nproc)")
+	flagSkipDeps    = flag.Bool("skip-deps", false, "Skip build dependency installation")
+	flagOnly        = flag.String("only", "", "Build a single named component")
+	flagTUI         = flag.Bool("tui", false, "Launch the TUI configuration wizard")
 	flagUpdateRepos = flag.Bool("update-repos", false, "Fetch latest epoch tags and overwrite repos config")
-	flagGenConfig  = flag.Bool("gen-config", false, "Export built-in config to repos.json")
-	flagDevFinder  = flag.Bool("dev-finder", false, "Regenerate pkg/repos/finder.go from active schema")
-	flagVerbose    = flag.Bool("verbose", false, "Enable verbose build output")
+	flagGenConfig   = flag.Bool("gen-config", false, "Export built-in config to repos.json")
+	flagDevFinder   = flag.Bool("dev-finder", false, "Regenerate pkg/repos/finder.go from active schema")
+	flagVerbose     = flag.Bool("verbose", false, "Enable verbose build output")
 )
 
 func log(format string, args ...any) {
@@ -219,17 +219,24 @@ func main() {
 		} else {
 			log("All build dependencies are satisfied")
 		}
-		if err := build.EnsureRustToolchain(func(f string, a ...any) { log(f, a...) }); err != nil {
+		if err := build.EnsureRustToolchain(workDir, func(f string, a ...any) { log(f, a...) }); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: Rust toolchain setup failed: %v\n", err)
 			os.Exit(1)
 		}
-		if err := build.EnsureJust(func(f string, a ...any) { log(f, a...) }); err != nil {
+		if err := build.EnsureJust(workDir, func(f string, a ...any) { log(f, a...) }); err != nil {
 			fmt.Fprintf(os.Stderr, "ERROR: 'just' installation failed: %v\n", err)
 			os.Exit(1)
 		}
 	} else {
 		log("Skipping dependency installation (-skip-deps)")
+		build.ApplyIsolatedRustEnv(workDir)
 	}
+
+	defer func() {
+		if !skipDeps {
+			build.PurgeIsolatedRustEnv(workDir, func(f string, a ...any) { log(f, a...) })
+		}
+	}()
 
 	targetRepos := cfg.Repos
 	if onlyComp != "" {
@@ -296,31 +303,36 @@ func main() {
 		}
 
 		repoDir := build.DownloadSource(workDir, repo, effectiveTag, logFn)
+		stageDir := filepath.Join(workDir, repo.Name+"-stage")
 		logVerbose(verbose, "Source directory: %s", repoDir)
 
 		debianSubdir := filepath.Join(repoDir, "debian")
 		if info, err := os.Stat(debianSubdir); err == nil && info.IsDir() {
 			logVerbose(verbose, "Found debian/ subdirectory in %s; using dpkg-buildpackage path", repo.Name)
-			if err := build.BuildWithDebianDir(repoDir, outDir, logFn); err != nil {
+			if err := build.BuildWithDebianDir(repoDir, outDir, workDir, logFn); err != nil {
 				log("WARNING: debian/ build failed for %s: %v; attempting manual path", repo.Name, err)
 			} else {
 				builtPkgs = append(builtPkgs, repo.Name)
 				logVerbose(verbose, "Component %s built via debian/ path successfully", repo.Name)
+				build.CleanSource(repoDir, stageDir, logFn)
+				logVerbose(verbose, "Cleaned source and staging for %s", repo.Name)
 				continue
 			}
 		}
 
-		build.RunVendor(repoDir, logFn)
+		build.RunVendor(repoDir, workDir, logFn)
 
-		if err := build.Compile(repoDir, repo.Name, jobs, logFn); err != nil {
+		if err := build.Compile(repoDir, repo.Name, workDir, jobs, logFn); err != nil {
 			log("ERROR: Compilation failed for %s: %v", repo.Name, err)
 			buildErr = err
+			build.CleanSource(repoDir, stageDir, logFn)
 			continue
 		}
 		logVerbose(verbose, "Compilation succeeded for %s", repo.Name)
 
 		if !build.ValidateBuildOutput(repoDir) {
 			log("WARNING: Build output validation failed for %s; skipping packaging", repo.Name)
+			build.CleanSource(repoDir, stageDir, logFn)
 			continue
 		}
 		logVerbose(verbose, "Build output validated for %s", repo.Name)
@@ -328,13 +340,13 @@ func main() {
 		version := build.GetVersion(repoDir, effectiveTag)
 		logVerbose(verbose, "Resolved version for %s: %s", repo.Name, version)
 
-		stageDir := filepath.Join(workDir, repo.Name+"-stage")
 		if err := os.MkdirAll(stageDir, 0755); err != nil {
 			log("ERROR: Cannot create staging dir for %s: %v", repo.Name, err)
+			build.CleanSource(repoDir, stageDir, logFn)
 			continue
 		}
 
-		if err := build.InstallToStage(repoDir, stageDir); err != nil {
+		if err := build.InstallToStage(repoDir, stageDir, workDir); err != nil {
 			log("WARNING: Staging install failed for %s: %v", repo.Name, err)
 		}
 
@@ -342,6 +354,7 @@ func main() {
 			logVerbose(verbose, "Staging directory has content; building .deb for %s", repo.Name)
 			if err := debian.BuildPackage(stageDir, outDir, repo.Name, version, di.Codename, maintainerName, maintainerEmail); err != nil {
 				log("ERROR: .deb assembly failed for %s: %v", repo.Name, err)
+				build.CleanSource(repoDir, stageDir, logFn)
 				continue
 			}
 			builtPkgs = append(builtPkgs, repo.Name)
@@ -349,6 +362,9 @@ func main() {
 		} else {
 			log("WARNING: Empty staging directory for %s; skipping .deb assembly", repo.Name)
 		}
+
+		build.CleanSource(repoDir, stageDir, logFn)
+		logVerbose(verbose, "Cleaned source and staging for %s", repo.Name)
 	}
 
 	if len(builtPkgs) > 0 {
@@ -362,18 +378,6 @@ func main() {
 			log("WARNING: Meta-package assembly failed: %v", err)
 		} else {
 			log("Meta-package cosmic-desktop built successfully")
-		}
-	}
-
-	log("Cleaning up source and staging directories")
-	for _, repo := range targetRepos {
-		srcDir := filepath.Join(workDir, repo.Name)
-		stageDir := filepath.Join(workDir, repo.Name+"-stage")
-		if err := os.RemoveAll(srcDir); err != nil {
-			logVerbose(verbose, "Cleanup warning: failed to remove %s: %v", srcDir, err)
-		}
-		if err := os.RemoveAll(stageDir); err != nil {
-			logVerbose(verbose, "Cleanup warning: failed to remove %s: %v", stageDir, err)
 		}
 	}
 

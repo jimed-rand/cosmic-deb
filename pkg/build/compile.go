@@ -32,7 +32,8 @@ func hasJustfile(dir string) (bool, string) {
 	return false, ""
 }
 
-func RunVendor(repoDir string, logFn func(string, ...any)) {
+func RunVendor(repoDir, workDir string, logFn func(string, ...any)) {
+	ApplyIsolatedRustEnv(workDir)
 	if ok, _ := hasJustfile(repoDir); ok {
 		logFn("Running 'just vendor' for %s", filepath.Base(repoDir))
 		cmd := exec.Command("just", "vendor")
@@ -44,7 +45,8 @@ func RunVendor(repoDir string, logFn func(string, ...any)) {
 	}
 }
 
-func Compile(repoDir, repoName string, jobs int, logFn func(string, ...any)) error {
+func Compile(repoDir, repoName, workDir string, jobs int, logFn func(string, ...any)) error {
+	ApplyIsolatedRustEnv(workDir)
 	logFn("Compiling component: %s", repoName)
 	env := buildEnv()
 
@@ -102,7 +104,8 @@ func ValidateBuildOutput(repoDir string) bool {
 	return false
 }
 
-func InstallToStage(repoDir, stageDir string) error {
+func InstallToStage(repoDir, stageDir, workDir string) error {
+	ApplyIsolatedRustEnv(workDir)
 	hasJust, _ := hasJustfile(repoDir)
 	makefile := filepath.Join(repoDir, "Makefile")
 
@@ -120,10 +123,11 @@ func InstallToStage(repoDir, stageDir string) error {
 	return fmt.Errorf("No install target found in %s", repoDir)
 }
 
-func BuildWithDebianDir(repoDir, outDir string, logFn func(string, ...any)) error {
+func BuildWithDebianDir(repoDir, outDir, workDir string, logFn func(string, ...any)) error {
+	ApplyIsolatedRustEnv(workDir)
 	logFn("Using debian/ directory for %s", filepath.Base(repoDir))
-	RunVendor(repoDir, logFn)
-	if err := runCmd(repoDir, "dpkg-buildpackage", "-us", "-uc", "-b"); err != nil {
+	RunVendor(repoDir, workDir, logFn)
+	if err := runWithEnv(repoDir, []string{"DEB_BUILD_OPTIONS=nodbg"}, "dpkg-buildpackage", "-us", "-uc", "-b"); err != nil {
 		return err
 	}
 	parent := filepath.Dir(repoDir)
