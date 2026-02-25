@@ -31,22 +31,21 @@ func EnsureCargoBinInPath(workDir string) {
 }
 
 func ApplyIsolatedRustEnv(workDir string) {
-	cargoHome := filepath.Join(workDir, ".cargo")
-	rustupHome := filepath.Join(workDir, ".rustup")
+	absWorkDir, err := filepath.Abs(workDir)
+	if err != nil {
+		absWorkDir = workDir
+	}
+	cargoHome := filepath.Join(absWorkDir, ".cargo")
+	rustupHome := filepath.Join(absWorkDir, ".rustup")
 	os.Setenv("CARGO_HOME", cargoHome)
 	os.Setenv("RUSTUP_HOME", rustupHome)
-	EnsureCargoBinInPath(workDir)
+	EnsureCargoBinInPath(absWorkDir)
 }
 
 func PurgeIsolatedRustEnv(workDir string, logFn func(string, ...any)) {
 	logFn("Purging isolated Rust environment in %s", workDir)
 	os.RemoveAll(filepath.Join(workDir, ".cargo"))
 	os.RemoveAll(filepath.Join(workDir, ".rustup"))
-}
-
-func CheckAptBased() bool {
-	_, err := exec.LookPath("apt-get")
-	return err == nil
 }
 
 func CheckPackagesInstalled(pkgs []string) (missing []string) {

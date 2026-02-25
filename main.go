@@ -181,6 +181,13 @@ func main() {
 		globalTag = interactiveSelectTag(cfg, verbose)
 	}
 
+	if abs, err := filepath.Abs(workDir); err == nil {
+		workDir = abs
+	}
+	if abs, err := filepath.Abs(outDir); err == nil {
+		outDir = abs
+	}
+
 	if *flagUseBranch {
 		globalTag = ""
 		log("Source mode: main branch HEAD (latest commits)")
@@ -203,8 +210,8 @@ func main() {
 
 	if !skipDeps {
 		log("Checking build dependencies")
-		if !build.CheckAptBased() {
-			fmt.Fprintf(os.Stderr, "ERROR: APT not found; only Debian and Ubuntu are supported\n")
+		if !distro.IsAptBased() {
+			fmt.Fprintf(os.Stderr, "ERROR: APT or dpkg not found; this program requires a Debian-based system\n")
 			os.Exit(1)
 		}
 		allDeps := distro.CollectAllBuildDeps(di.ID, di.Codename)

@@ -11,8 +11,8 @@ COSMIC_PACKAGES=(
 )
 
 check_apt() {
-    if ! command -v apt-get > /dev/null 2>&1; then
-        echo "ERROR: This tool requires an APT-based distribution (Debian or Ubuntu)." >&2
+    if ! command -v apt-get > /dev/null 2>&1 || ! command -v dpkg > /dev/null 2>&1; then
+        echo "ERROR: This tool requires a Debian-style system with APT and dpkg." >&2
         exit 1
     fi
 }

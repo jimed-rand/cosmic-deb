@@ -12,8 +12,8 @@ Furthermore, this utility incorporates advanced logic to ascertain the current s
 
 To ensure the successful execution of the build process, the host system must satisfy the following prerequisites:
 
-- **Operating System:** Debian 12 (Bookworm) or a subsequent release, or alternatively, Ubuntu 22.04 (Jammy Jellyfish) or a subsequent LTS release. Also applied with the Developmental branch of Ubuntu (`devel`). **Note:** Non-LTS iterations of Ubuntu are explicitly unsupported due to their ephemeral lifecycle and inherent unsuitability for stable deployment environments.
-- **Core Utilities:** The presence of `apt-get`, `git`, `curl`, `fakeroot`, and `dpkg-dev` is mandatory for dependency resolution and package assembly.
+- **Operating System:** Any Debian-based distribution (such as Debian, Ubuntu, or Pop!_OS) utilizing the **APT** package manager and **dpkg**. The framework now prioritises functional package manager detection over rigid `/etc/os-release` parsing, allowing execution on any compatible Debian-style system while maintaining baseline dependency resolution.
+- **Core Utilities:** The presence of `apt` (or `apt-get`) and `dpkg` is mandatory for dependency resolution, package status auditing, and final archive assembly. Tools such as `git`, `curl`, `fakeroot`, and `dpkg-dev` are also requisite.
 - **Compiler:** Go version 1.24 or later is requisite for the initial compilation of the builder itself.
 - **Rust Toolchain:** The builder provisions Rust automatically via `rustup` into an isolated directory inside the working directory. No system-wide Rust installation is required or modified.
 
@@ -108,7 +108,7 @@ make clean                  # Purges the designated working directories and comp
 
 ## Build Procedure Framework
 
-1. **Dependency Validation:** The builder evaluates the system for missing APT packages (C/C++ toolchain, development headers, packaging utilities) and undertakes installation (invoking `sudo` conditionally). Rust-specific APT packages (`rustc`, `cargo`, `rust-all`, `dh-cargo`) are intentionally excluded; the Rust toolchain is provisioned exclusively via `rustup` in the isolated environment.
+1. **Dependency Validation:** The builder evaluates the host environment for the presence of the APT and dpkg toolchains. Once verified as a compatible Debian-style system, it audits the system for missing build-time dependencies (C/C++ toolchain, development headers, packaging utilities) and undertakes installation via `apt-get` (invoking `sudo` conditionally). Rust-specific APT packages (`rustc`, `cargo`, `rust-all`, `dh-cargo`) are intentionally excluded; the Rust toolchain is provisioned exclusively via `rustup` in the isolated environment.
 2. **Rust Isolation:** `rustup` is installed into `<workdir>/.cargo-isolated` and `<workdir>/.rustup-isolated`. The stable toolchain and `just` command runner are configured within this scope. All `cargo` invocations during compilation use the isolated binary paths.
 3. **Sequential Ordering:** Prior to compilation, components are subjected to a structural A–Z sortation, thereby mitigating potential discrepancies arising from unpredictable build sequences.
 4. **Component Processing:** For each designated component, the source material is acquired (prioritising tarball extraction with a fallback to `git clone`). If a `justfile` vendor target is detected, dependencies are vendored, followed by systematic compilation and output validation prior to the staging phase.

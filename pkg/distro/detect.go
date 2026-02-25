@@ -2,6 +2,7 @@ package distro
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -11,53 +12,55 @@ type Info struct {
 }
 
 func Detect() Info {
+	info := Info{ID: "unknown", Codename: "unknown"}
 	data, err := os.ReadFile("/etc/os-release")
-	if err != nil {
-		return Info{"unknown", "unknown"}
-	}
-	vals := make(map[string]string)
-	for _, line := range strings.Split(string(data), "\n") {
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) == 2 {
-			vals[parts[0]] = strings.Trim(parts[1], `"`)
+	if err == nil {
+		vals := make(map[string]string)
+		for _, line := range strings.Split(string(data), "\n") {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				vals[parts[0]] = strings.Trim(parts[1], `"`)
+			}
+		}
+		info.ID = vals["ID"]
+		info.Codename = vals["VERSION_CODENAME"]
+		if info.Codename == "" {
+			info.Codename = vals["VERSION_ID"]
 		}
 	}
-	return Info{
-		ID:       vals["ID"],
-		Codename: vals["VERSION_CODENAME"],
+	if info.ID == "" || info.ID == "unknown" {
+		if IsAptBased() {
+			info.ID = "debian"
+		}
 	}
+	if info.Codename == "" || info.Codename == "unknown" {
+		if info.ID == "debian" || info.ID == "ubuntu" {
+			info.Codename = "sid"
+		}
+	}
+	return info
 }
 
-var debianSupported = map[string]bool{
-	"bookworm": true,
-	"trixie":   true,
-	"forky":    true,
-	"sid":      true,
-	"unstable": true,
-	"testing":  true,
-}
-
-var ubuntuSupported = map[string]bool{
-	"jammy":    true,
-	"noble":    true,
-	"resolute": true,
-	"devel":    true,
+func IsAptBased() bool {
+	_, errApt := exec.LookPath("apt")
+	if errApt != nil {
+		_, errApt = exec.LookPath("apt-get")
+	}
+	if errApt != nil {
+		return false
+	}
+	_, errDpkg := exec.LookPath("dpkg")
+	return errDpkg == nil
 }
 
 func CheckSupported(id, codename string) (bool, string) {
-	switch id {
-	case "debian":
-		if !debianSupported[codename] {
-			return false, "Debian release '" + codename + "' is not supported. Minimum supported release is bookworm (12)."
-		}
-	case "ubuntu":
-		if !ubuntuSupported[codename] {
-			return false, "Ubuntu release '" + codename + "' is not supported. Only LTS and devel releases are supported (e.g., jammy, noble, or resolute)."
-		}
-	default:
-		return false, "Distribution '" + id + "' is not supported. Only Debian and Ubuntu are supported."
+	if IsAptBased() {
+		return true, ""
 	}
-	return true, ""
+	if id == "debian" || id == "ubuntu" {
+		return true, ""
+	}
+	return false, "Distribution detection failed or unsupported. This program requires an APT-based system with 'dpkg' (Debian/Ubuntu style)."
 }
 
 func IsContainer() bool {

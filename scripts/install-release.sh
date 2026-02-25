@@ -10,32 +10,18 @@ cleanup() { rm -rf "$TMP_DIR"; }
 trap cleanup EXIT
 
 check_apt() {
-    if ! command -v apt-get > /dev/null 2>&1; then
-        echo "ERROR: This tool requires an APT-based distribution (Debian or Ubuntu)." >&2
+    if ! command -v apt-get > /dev/null 2>&1 || ! command -v dpkg > /dev/null 2>&1; then
+        echo "ERROR: This tool requires a Debian-style system with APT and dpkg." >&2
         exit 1
     fi
 }
 
 detect_distro() {
-    . /etc/os-release
-    echo "$ID $VERSION_CODENAME"
-}
-
-check_min_version() {
-    local id="$1"
-    local codename="$2"
-    declare -A debian_supported=( [bookworm]=1 [trixie]=1 [forky]=1 [sid]=1 [unstable]=1 [testing]=1 )
-    declare -A ubuntu_supported=( [jammy]=1 [noble]=1 [resolute]=1 [devel]=1 )
-    if [ "$id" = "debian" ]; then
-        if [ -z "${debian_supported[$codename]}" ]; then
-            echo "ERROR: Debian release '$codename' is not supported." >&2; exit 1
-        fi
-    elif [ "$id" = "ubuntu" ]; then
-        if [ -z "${ubuntu_supported[$codename]}" ]; then
-            echo "ERROR: Ubuntu release '$codename' is not supported." >&2; exit 1
-        fi
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        echo "$ID $VERSION_CODENAME"
     else
-        echo "ERROR: Distribution '$id' is not supported." >&2; exit 1
+        echo "unknown unknown"
     fi
 }
 
@@ -59,7 +45,6 @@ install_runtime_deps() {
 
 check_apt
 read -r DISTRO_ID CODENAME <<< "$(detect_distro)"
-check_min_version "$DISTRO_ID" "$CODENAME"
 ensure_tool curl
 
 if [ "$RELEASE_TAG" = "latest" ]; then
