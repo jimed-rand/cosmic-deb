@@ -43,7 +43,7 @@ At startup, the builder performs a hardware introspection pass by reading `/proc
 
 - The parallel compilation job count is capped at 1 (single-threaded compilation), regardless of any `-jobs` argument supplied by the operator.
 - A mandatory cooldown pause is inserted after every 2 successfully built components.
-- The cooldown duration is dynamically calculated between 15 and 30 minutes, depending on the current CPU temperature as reported by the system's thermal subsystem.
+- The cooldown duration is dynamically calculated between 15 and 45 minutes, depending on the current CPU temperature as reported by the system's thermal subsystem.
 
 ### Temperature Sensing
 
@@ -55,8 +55,8 @@ The cooldown duration scale operates as follows:
 |---|---|
 | Below 70°C | No cooldown (build continues immediately) |
 | 70°C – 79°C | 15 minutes |
-| 80°C – 89°C | 15 – 30 minutes (linearly interpolated) |
-| 90°C and above | 30 minutes (maximum) |
+| 80°C – 89°C | 15 – 45 minutes (linearly interpolated) |
+| 90°C and above | 45 minutes (maximum) |
 
 If the thermal sensor is not readable or unavailable (common on certain embedded or virtualised environments), the limiter defaults to the minimum 15-minute cooldown as a conservative safety measure.
 
