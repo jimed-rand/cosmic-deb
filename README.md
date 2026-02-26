@@ -33,6 +33,45 @@ Rather than relying on APT-packaged Rust (`rustc`, `cargo`, `rust-all`, `dh-carg
 
 Each component's source tree and staging directory are deleted immediately after its `.deb` package has been assembled (or after a failure to compile or stage). This prevents the cumulative disk usage that would otherwise result from retaining all sources concurrently throughout a full build run. The working directory therefore contains at most one component's source at any given moment during the pipeline.
 
+## Thermal Build Limiter
+
+The builder incorporates an automatic thermal protection system designed specifically for low-end hardware — including processors such as Intel Celeron, legacy Intel Core and Intel Pentium/Atom series, AMD Athlon (including Ryzen-class Athlon Silver/Gold variants), and any other CPUs with 2 physical cores and 2 logical threads. These processors are particularly susceptible to sustained thermal saturation during large sequential compilation workloads, which can result in system instability or thermal shutdown.
+
+### Detection Mechanism
+
+At startup, the builder performs a hardware introspection pass by reading `/proc/cpuinfo` to determine the number of distinct physical cores and logical threads. A CPU is classified as a low-end profile when it presents no more than 2 physical cores and 2 logical threads simultaneously. Upon classification, the following constraints are automatically activated:
+
+- The parallel compilation job count is capped at 1 (single-threaded compilation), regardless of any `-jobs` argument supplied by the operator.
+- A mandatory cooldown pause is inserted after every 2 successfully built components.
+- The cooldown duration is dynamically calculated between 15 and 30 minutes, depending on the current CPU temperature as reported by the system's thermal subsystem.
+
+### Temperature Sensing
+
+The limiter queries the CPU temperature via a multi-source fallback strategy. It first interrogates known `hwmon` drivers by name — specifically `coretemp` (Intel), `k10temp` and `zenpower` (AMD), and `acpitz` (ACPI generic) — by scanning `/sys/class/hwmon/`. If no named driver matches, it falls back to reading `/sys/class/thermal/thermal_zone*/temp` sequentially. When multiple temperature inputs are available within a single driver, the maximum value across all inputs is used.
+
+The cooldown duration scale operates as follows:
+
+| CPU Temperature Range | Cooldown Duration |
+|---|---|
+| Below 70°C | No cooldown (build continues immediately) |
+| 70°C – 79°C | 15 minutes |
+| 80°C – 89°C | 15 – 30 minutes (linearly interpolated) |
+| 90°C and above | 30 minutes (maximum) |
+
+If the thermal sensor is not readable or unavailable (common on certain embedded or virtualised environments), the limiter defaults to the minimum 15-minute cooldown as a conservative safety measure.
+
+### Adaptive Cooldown Reduction
+
+During the cooldown window, the builder actively re-polls the CPU temperature once per minute. If the measured temperature drops below 70°C and more than 5 minutes of cooldown remain, the builder shortens the remaining wait to 5 minutes. This prevents unnecessarily long idle periods on machines where the thermal dissipation is sufficient to cool the processor rapidly.
+
+### Disabling the Thermal Limiter
+
+The thermal protection system can be suppressed entirely with the `-no-thermal` flag for operators who have adequate cooling, custom fan profiles, or who are building within a containerised or server environment where thermal constraints are not applicable:
+
+```sh
+./cosmic-deb -no-thermal
+```
+
 ## Operational Methodology
 
 ### Interactive Command Line Interface (CLI)
@@ -84,6 +123,7 @@ This instantiation provides a structured, full-screen navigational wizard. The i
 | `-gen-config` | `false` | Extracts the internal configuration and exports it to a `repos.json` file. |
 | `-dev-finder` | `false` | Facilitates developer operations by regenerating `pkg/repos/finder.go` from the active schema. |
 | `-verbose` | `false` | Enables verbose timestamped logging for all internal build decisions and operations. |
+| `-no-thermal` | `false` | Disables the thermal build limiter for low-end CPUs (2C2T). Use on adequate-cooling hardware. |
 
 ### Makefile Directives
 
@@ -108,15 +148,17 @@ make clean                  # Purges the designated working directories and comp
 
 ## Build Procedure Framework
 
-1. **Dependency Validation:** The builder evaluates the host environment for the presence of the APT and dpkg toolchains. Once verified as a compatible Debian-style system, it audits the system for missing build-time dependencies (C/C++ toolchain, development headers, packaging utilities) and undertakes installation via `apt-get` (invoking `sudo` conditionally). Rust-specific APT packages (`rustc`, `cargo`, `rust-all`, `dh-cargo`) are intentionally excluded; the Rust toolchain is provisioned exclusively via `rustup` in the isolated environment.
-2. **Rust Isolation:** `rustup` is installed into `<workdir>/.cargo-isolated` and `<workdir>/.rustup-isolated`. The stable toolchain and `just` command runner are configured within this scope. All `cargo` invocations during compilation use the isolated binary paths.
-3. **Sequential Ordering:** Prior to compilation, components are subjected to a structural A–Z sortation, thereby mitigating potential discrepancies arising from unpredictable build sequences.
-4. **Component Processing:** For each designated component, the source material is acquired (prioritising tarball extraction with a fallback to `git clone`). If a `justfile` vendor target is detected, dependencies are vendored, followed by systematic compilation and output validation prior to the staging phase.
-5. **Package Assembly:** A standardised `DEBIAN/control` manifest is generated, enumerating necessary runtime dependencies. Subsequently, the `fakeroot dpkg-deb` utility executes the synthesis of the `.deb` archive. Appended filenames rigorously reflect the host distribution's codename.
-6. **Per-Component Cleanup:** Immediately after each component's `.deb` is assembled (or after compilation/staging failure), its source tree and staging directory are removed. This bounds peak disk usage to a single component at a time rather than accumulating all sources throughout the pipeline.
-7. **Meta-package Synthesis:** The `cosmic-desktop` meta-package is algorithmically constructed to serve as an aggregate dependency linking all independently built components, simplifying holistic installation.
-8. **Rust Environment Purge:** Upon pipeline completion or failure (via `defer`), the isolated Rust environment directories are removed entirely, leaving no Rust toolchain artefacts on the host system.
-9. **Deployment Resolution:** Provided the process operates outside a constrained containerised environment, the builder consults the operator regarding the immediate system-wide deployment of the synthesised packages.
+1. **Thermal Profile Detection:** At initialisation, the builder reads `/proc/cpuinfo` to classify the host CPU as either standard or low-end (≤2C2T). If classified as low-end and thermal limiting is not suppressed, parallel job counts are capped and inter-component cooldowns are activated.
+2. **Dependency Validation:** The builder evaluates the host environment for the presence of the APT and dpkg toolchains. Once verified as a compatible Debian-style system, it audits the system for missing build-time dependencies (C/C++ toolchain, development headers, packaging utilities) and undertakes installation via `apt-get` (invoking `sudo` conditionally). Rust-specific APT packages (`rustc`, `cargo`, `rust-all`, `dh-cargo`) are intentionally excluded; the Rust toolchain is provisioned exclusively via `rustup` in the isolated environment.
+3. **Rust Isolation:** `rustup` is installed into `<workdir>/.cargo-isolated` and `<workdir>/.rustup-isolated`. The stable toolchain and `just` command runner are configured within this scope. All `cargo` invocations during compilation use the isolated binary paths.
+4. **Sequential Ordering:** Prior to compilation, components are subjected to a structural A–Z sortation, thereby mitigating potential discrepancies arising from unpredictable build sequences.
+5. **Component Processing:** For each designated component, the source material is acquired (prioritising tarball extraction with a fallback to `git clone`). If a `justfile` vendor target is detected, dependencies are vendored, followed by systematic compilation and output validation prior to the staging phase.
+6. **Package Assembly:** A standardised `DEBIAN/control` manifest is generated, enumerating necessary runtime dependencies. Subsequently, the `fakeroot dpkg-deb` utility executes the synthesis of the `.deb` archive. Appended filenames rigorously reflect the host distribution's codename.
+7. **Per-Component Cleanup:** Immediately after each component's `.deb` is assembled (or after compilation/staging failure), its source tree and staging directory are removed. This bounds peak disk usage to a single component at a time rather than accumulating all sources throughout the pipeline.
+8. **Thermal Cooldown (Low-End CPUs):** On low-end CPU profiles, after every 2 successfully packaged components, the builder pauses for a dynamically calculated cooldown period. The duration scales from 15 to 30 minutes based on the live CPU temperature reading. If the temperature drops below the warn threshold during cooldown, the remaining wait is shortened to 5 minutes.
+9. **Meta-package Synthesis:** The `cosmic-desktop` meta-package is algorithmically constructed to serve as an aggregate dependency linking all independently built components, simplifying holistic installation.
+10. **Rust Environment Purge:** Upon pipeline completion or failure (via `defer`), the isolated Rust environment directories are removed entirely, leaving no Rust toolchain artefacts on the host system.
+11. **Deployment Resolution:** Provided the process operates outside a constrained containerised environment, the builder consults the operator regarding the immediate system-wide deployment of the synthesised packages.
 
 ## Deployment Scripts
 
@@ -149,6 +191,8 @@ cosmic-deb/
 │   │   ├── finder.go          # Native repository enumeration (hepp3n/Codeberg)
 │   │   ├── loader.go          # Configuration ingestion, epoch tag querying, and state mutation
 │   │   └── types.go           # Structural definitions for repositories and related configurations
+│   ├── thermal/
+│   │   └── limiter.go         # CPU thermal profiling, low-end detection, and cooldown management
 │   └── tui/
 │       ├── monitor.go         # Real-time concurrent build progress observatory
 │       └── wizard.go          # Algorithmic configuration solicitation interface
@@ -176,7 +220,7 @@ The COSMIC Desktop Environment, its constituent components, and the original sou
 
 The realisation of this project owes a profound debt of gratitude to the wider open-source community. Specific, formal recognition is extended to the following entities:
 
-1. **James Ed Randson**: As the primary developer of this builder utility, responsible for the automated Go-based workflow, abstraction logic, and concurrent execution pipelines.
+1. **James Ed Randson**: As the primary developer of this builder utility, responsible for the automated Go-based workflow, abstraction logic, concurrent execution pipelines, and the thermal protection subsystem.
 2. **hepp3n**: The seminal upstream architectural framework for Debian packaging, which underpins the fundamental logic of this build tool, was meticulously crafted and is maintained by **hepp3n**. Their foundational work available at [codeberg.org/hepp3n](https://codeberg.org/hepp3n) is rigorously integral to the successful deployment of the COSMIC ecosystem on Debian-based derivatives. We formally acknowledge their paramount effort as the primary packaging author.
 3. **System76, Inc.**: For their pioneering work in engineering the COSMIC Desktop Environment, advancing contemporary Rust-based desktop paradigms, and dedicating extensive resources to the broader open-source Linux community.
 4. **The Free and Open Source Software (FOSS) Ecosystem**: Extends to the maintainers of the Go programming language, the Debian Project, and Canonical Ltd., whose underlying systems, comprehensive libraries, and compilation utilities constitute the fundamental architecture upon which this logic fundamentally depends.

@@ -17,6 +17,7 @@ import (
 	"github.com/jimed-rand/cosmic-deb/pkg/debian"
 	"github.com/jimed-rand/cosmic-deb/pkg/distro"
 	"github.com/jimed-rand/cosmic-deb/pkg/repos"
+	"github.com/jimed-rand/cosmic-deb/pkg/thermal"
 	"github.com/jimed-rand/cosmic-deb/pkg/tui"
 )
 
@@ -34,6 +35,7 @@ var (
 	flagGenConfig   = flag.Bool("gen-config", false, "Export built-in config to repos.json")
 	flagDevFinder   = flag.Bool("dev-finder", false, "Regenerate pkg/repos/finder.go from active schema")
 	flagVerbose     = flag.Bool("verbose", false, "Enable verbose build output")
+	flagNoThermal   = flag.Bool("no-thermal", false, "Disable thermal build limiter for low-end CPUs")
 )
 
 func log(format string, args ...any) {
@@ -75,8 +77,13 @@ func main() {
 	verbose := *flagVerbose
 
 	log("cosmic-deb starting up")
-	logVerbose(verbose, "Parsed flags: repos=%s tag=%s use-branch=%v workdir=%s outdir=%s jobs=%d skip-deps=%v only=%s tui=%v verbose=%v",
-		*flagRepos, *flagTag, *flagUseBranch, *flagWorkDir, *flagOutDir, *flagJobs, *flagSkipDeps, *flagOnly, *flagTUI, verbose)
+	logVerbose(verbose, "Parsed flags: repos=%s tag=%s use-branch=%v workdir=%s outdir=%s jobs=%d skip-deps=%v only=%s tui=%v verbose=%v no-thermal=%v",
+		*flagRepos, *flagTag, *flagUseBranch, *flagWorkDir, *flagOutDir, *flagJobs, *flagSkipDeps, *flagOnly, *flagTUI, verbose, *flagNoThermal)
+
+	thermalProfile := thermal.DetectProfile()
+	if !*flagNoThermal {
+		thermal.SummarizeThermalProfile(thermalProfile, func(f string, a ...any) { log(f, a...) })
+	}
 
 	cfg, cfgPath := repos.Load(*flagRepos)
 	if cfg == nil {
@@ -135,6 +142,11 @@ func main() {
 		logVerbose(verbose, "Detected %d logical CPUs via nproc", jobs)
 	}
 
+	if !*flagNoThermal && thermalProfile.IsLowEnd {
+		jobs = thermal.AdjustJobs(thermalProfile, jobs)
+		logVerbose(verbose, "Thermal limiter adjusted jobs to %d for low-end CPU", jobs)
+	}
+
 	workDir := *flagWorkDir
 	outDir := *flagOutDir
 	globalTag := *flagTag
@@ -167,7 +179,11 @@ func main() {
 		}
 		if v, ok := choices["jobs"]; ok && v != "" {
 			if n, err := strconv.Atoi(v); err == nil {
-				jobs = n
+				if !*flagNoThermal && thermalProfile.IsLowEnd {
+					jobs = thermal.AdjustJobs(thermalProfile, n)
+				} else {
+					jobs = n
+				}
 			}
 		}
 		if v, ok := choices["skip_deps"]; ok {
@@ -297,6 +313,9 @@ func main() {
 		}
 	}
 
+	thermalEnabled := !*flagNoThermal && thermalProfile.IsLowEnd
+	successfulBuilds := 0
+
 	var buildErr error
 	for i, repo := range targetRepos {
 		effectiveTag := repos.EffectiveTag(repo, globalTag)
@@ -320,9 +339,13 @@ func main() {
 				log("WARNING: debian/ build failed for %s: %v; attempting manual path", repo.Name, err)
 			} else {
 				builtPkgs = append(builtPkgs, repo.Name)
+				successfulBuilds++
 				logVerbose(verbose, "Component %s built via debian/ path successfully", repo.Name)
 				build.CleanSource(repoDir, stageDir, logFn)
 				logVerbose(verbose, "Cleaned source and staging for %s", repo.Name)
+				if thermalEnabled {
+					thermal.WaitForCooldown(thermalProfile, successfulBuilds, logFn)
+				}
 				continue
 			}
 		}
@@ -365,6 +388,7 @@ func main() {
 				continue
 			}
 			builtPkgs = append(builtPkgs, repo.Name)
+			successfulBuilds++
 			log("[%d/%d] Packaged: %s %s~%s", i+1, total, repo.Name, version, di.Codename)
 		} else {
 			log("WARNING: Empty staging directory for %s; skipping .deb assembly", repo.Name)
@@ -372,6 +396,10 @@ func main() {
 
 		build.CleanSource(repoDir, stageDir, logFn)
 		logVerbose(verbose, "Cleaned source and staging for %s", repo.Name)
+
+		if thermalEnabled {
+			thermal.WaitForCooldown(thermalProfile, successfulBuilds, logFn)
+		}
 	}
 
 	if len(builtPkgs) > 0 {
